@@ -1,47 +1,40 @@
 # Maritime Vessel Tracking System
 
-A Python-based system for collecting, processing, and visualizing maritime vessel data using AIS (Automatic Identification System) information.
+A Python-based system for collecting, processing, and visualizing real-time maritime vessel data using AIS (Automatic Identification System) information from AISHub.
 
 ## Overview
 
 This project creates a pipeline for:
-- Collecting AIS data from open maritime sources
+- Collecting real-time AIS data from AISHub
 - Processing and enriching the data using machine learning
 - Storing the data in PostgreSQL
 - Providing an API for data access
 - Visualizing vessel movements on an interactive map
 
-## Free Data Sources
+## Data Source: AISHub API
 
-1. **AISHub** (https://www.aishub.net/api)
-   - Free tier provides access to AIS data
-   - Requires registration
-   - Limited to 100 requests per day
-   - Data includes vessel position, speed, course
+1. Register at [AISHub](https://www.aishub.net/join-us)
+2. After registration, you'll receive:
+   - API key
+   - Access to real-time AIS data
+   - 100 requests per day (free tier)
+   - JSON formatted responses
 
-2. **MarineTraffic** (https://www.marinetraffic.com/en/ais-api-services)
-   - Free developer account
-   - Limited data access
-   - Good documentation
-
-3. **Danish Maritime Authority** (https://www.dma.dk/SikkerhedTilSoes/Sejladsinformation/AIS/Sider/default.aspx)
-   - Free AIS data for Danish waters
-   - Historical data available
-   - Data in standard NMEA format
-
-4. **U.S. Coast Guard** (https://www.navcen.uscg.gov/?pageName=AISDataFeeds)
-   - Free AIS data feeds
-   - Coverage of U.S. coastal waters
-   - Real-time data available
+### AISHub API Features
+- Vessel positions (Lat/Long)
+- Vessel details (MMSI, name, type)
+- Navigation data (speed, course, destination)
+- Rate limit: 1 request per minute
+- Coverage: Global AIS network
 
 ## Project Structure
 ```
 maritime_tracker/
 ├── data/
-│   ├── raw/              # Raw AIS data storage
+│   ├── raw/              # Raw API response storage
 │   └── processed/        # Processed and enriched data
 ├── src/
-│   ├── collector/        # Data collection scripts
+│   ├── collector/        # AISHub API collector
 │   ├── processing/       # ML processing scripts
 │   ├── api/             # Flask API
 │   └── visualization/    # Folium map generation
@@ -83,7 +76,8 @@ python src/db/init_db.py
 5. Configure environment variables
 ```bash
 cp .env.example .env
-# Edit .env with your API keys and database credentials
+# Add your AISHub API key to .env file:
+# AISHUB_API_KEY=your_api_key_here
 ```
 
 ## Dependencies
@@ -101,9 +95,9 @@ python-dotenv==1.0.0
 
 ## Usage
 
-1. Collect AIS data:
+1. Start the data collector:
 ```bash
-python src/collector/collect_ais.py
+python src/collector/aishub_collector.py
 ```
 
 2. Process and enrich data:
@@ -128,14 +122,21 @@ http://localhost:5000/map
 - `GET /vessels/area` - Get vessels in specified area
 - `GET /map` - View interactive map
 
-## ML Models
+## ML Features
 
 The system uses machine learning for:
 1. Vessel type classification
 2. Trajectory prediction
 3. Anomaly detection
 
-Models are trained on historical AIS data using scikit-learn.
+Models are trained on collected AIS data using scikit-learn.
+
+## Rate Limiting
+
+The collector implements rate limiting to respect AISHub's limits:
+- Maximum 100 requests per day
+- Minimum 60 seconds between requests
+- Automatic retry on failure
 
 ## Contributing
 
