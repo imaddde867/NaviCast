@@ -33,7 +33,6 @@ This project creates a real-time maritime vessel tracking system using AIS (Auto
 
 ### 1. Data Collection (`data_collect.py`)
 - Connects to AISHub API
-- Handles rate limiting (100 requests/day)
 - Stores raw JSON responses
 
 ### 2. Data Processing (`data_enrichment.ipynb`)
@@ -52,31 +51,6 @@ This project creates a real-time maritime vessel tracking system using AIS (Auto
 - Interactive Folium map
 - Real-time vessel positions
 - Route visualization
-
-## Setup
-
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Configure AISHub API:
-```bash
-# Create .env file with your API key
-AISHUB_API_KEY=your_api_key_here
-```
-
-3. Run components:
-```bash
-# Start data collector
-python src/data_collect.py
-
-# Start API server
-python src/api.py
-
-# Open visualization
-python src/Visualising.py
-```
 
 ## Dependencies
 - Python 3.8+
