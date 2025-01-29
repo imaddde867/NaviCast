@@ -2,7 +2,6 @@
 
 ## Student Information
 - **Name:** Imad Eddine EL MOUSS
-- **University:** Turku University of Applied Sciences (TUAS)
 - **Project:** Real-time Maritime Vessel Tracking using AIS Data
 
 ## Project Structure
