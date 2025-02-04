@@ -1,0 +1,49 @@
+
+flowchart TB
+    %% Data Ingestion
+    A1[Live AIS API] -->|Python Requests / WebSockets| B[Python Data Collector Script]
+    A2[Historical AIS Data] -->|Batch Download| B
+    B -->|Raw Data| C[(Raw Data Storage)]
+
+    %% Streaming for Real-time Processing
+    B -->|Live Data Stream| S[Message Queue (Kafka/Redis)] --> C
+
+    %% Data Processing & ML Enrichment
+    C -->|Batch Processing| D1[ML Model Training]
+    C -->|Real-time Processing| D2[ML Model Inference]
+    D1 -->|Trained Model| D2
+    D2 -->|Enriched Data| E[(PostgreSQL Database)]
+
+    %% API Layer & Visualization
+    E -->|Query Results| F[API Layer (Flask / FastAPI / GraphQL)]
+    F -->|JSON| G1[Interactive Dashboard (Streamlit / Dash)]
+    F -->|Data| G2[External BI Tools (Tableau / Power BI)]
+
+    %% Subsystems Grouping
+    subgraph Data Ingestion
+        A1
+        A2
+        B
+        S
+    end
+
+    subgraph Data Processing & AI/ML
+        C
+        D1
+        D2
+        E
+    end
+
+    subgraph API & Visualization
+        F
+        G1
+        G2
+    end
+
+    %% Styling
+    classDef primary fill:#93c5fd,stroke:#60a5fa,stroke-width:2px,color:#1e3a8a
+    classDef storage fill:#86efac,stroke:#4ade80,stroke-width:2px,color:#065f46
+    classDef api fill:#c4b5fd,stroke:#a78bfa,stroke-width:2px,color:#4c1d95
+    class B,D1,D2 primary
+    class C,E storage
+    class F api
