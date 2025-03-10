@@ -137,10 +137,6 @@ navicast/
 - Enhance the UI with vessel details and historical tracks.
 - Deploy on a cloud service for global accessibility.
 
-## Acknowledgments
-- Digitraffic for providing real-time AIS data.
-- The open-source community for tools like Leaflet.js, XGBoost, and PostgreSQL.
-
 ## Contact
 Created by Imad Eddine
 
