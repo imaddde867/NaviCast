@@ -20,6 +20,7 @@
 - [Installation](#installation)
 - [Project Structure](#project-structure)
 - [How It Works](#how-it-works)
+- [Machine Learning Model Details](#machine-learning-model-details)
 - [Performance Metrics](#performance-metrics)
 - [Future Improvements](#future-improvements)
 - [Acknowledgments](#acknowledgments)
@@ -137,6 +138,7 @@ navicast/
 ├── ais_streaming.py     # MQTT data streaming
 ├── prediction_service.py # ML prediction generation
 ├── vessel_prediction_model.pkl # Trained XGBoost model
+├── ML_MODEL.pdf         # Detailed ML model creation steps (Jupyter Notebook export)
 ├── requirements.txt     # Python dependencies
 ├── README.md            # This file
 └── schema.sql           # Database schema
@@ -146,6 +148,9 @@ navicast/
 1. **Data Ingestion**: AIS data is streamed in real-time from Digitraffic via MQTT, processed in batches, and stored in PostgreSQL.
 2. **Prediction Generation**: A tuned XGBoost model predicts vessel positions based on features like speed, course, and time differences, with results stored in the `predictions` table.
 3. **Visualization**: The frontend fetches data via the FastAPI endpoint `/vessels`, rendering it on an interactive map with current and predicted positions.
+
+## Machine Learning Model Details
+The predictive core of NAVICAST relies on a tuned XGBoost model optimized with Optuna. For a comprehensive breakdown of the model creation process—including data preprocessing, feature engineering, hyperparameter tuning, and evaluation—refer to the [`ML_MODEL.pdf`](./ML_MODEL.pdf) file. This document is an exported Jupyter Notebook detailing all steps, code, and visualizations used to develop and refine the model.
 
 ## Performance Metrics
 
@@ -169,7 +174,6 @@ navicast/
 
 ## Acknowledgments
 - Digitraffic for providing real-time AIS data.
-- The open-source community for tools like Leaflet.js, XGBoost, and PostgreSQL.
 
 ## Contact
 Created by Imad Eddine
