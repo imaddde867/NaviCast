@@ -1,0 +1,14 @@
+
+Hope you enjoy your new logo, here are the people that
+made your beautiful logo happen :)
+font name: Arvo-Bold
+font link: https://fonts.google.com/specimen/Arvo
+font author: Anton Koovit
+font author site: http://files.korkork.com/
+
+
+icon designer: Vicons Design
+icon designer link: /ViconsDesign
+        
+{"bg":"#EBEAF4","icon-gradient-0":"#E98E0D","icon-gradient-1":"#1536F1","font":"#2F2849","slogan":"#433c5d"}
+      
