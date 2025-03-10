@@ -5,6 +5,10 @@
 [![XGBoost](https://img.shields.io/badge/XGBoost-Machine%20Learning-yellow)](https://xgboost.readthedocs.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-blue)](https://www.postgresql.org/)
 
+<p align="center">
+  <img src="static/NAVICAST-logo/logo-white.svg" alt="NAVICAST Logo" width="300">
+</p>
+
 ## Table of Contents
 - [Overview](#overview)
 - [Features](#features)
