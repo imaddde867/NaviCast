@@ -77,21 +77,51 @@ pip install -r requirements.txt
 
 ### 3. Configure Database
 - Set up a PostgreSQL database with the appropriate credentials.
+- Start the PostgreSQL service:
+  ```bash
+  # On Linux/MacOS (example with Homebrew on MacOS)
+  brew services start postgresql
+
+  # On Windows (if using a PostgreSQL installer)
+  # Ensure the service is running via Services app or command line
+  ```
 - Create the database and tables:
-```bash
-psql -U your_username -d postgres -f schema.sql
-```
+  ```bash
+  psql -U your_username -d postgres -f schema.sql
+  ```
+  Alternatively, manually create the required tables:
+  ```sql
+  CREATE TABLE raw_ais_data (
+      id SERIAL PRIMARY KEY,
+      vessel_id INTEGER,          -- MMSI as the vessel identifier
+      latitude FLOAT,            -- Latitude from geometry.coordinates[1]
+      longitude FLOAT,           -- Longitude from geometry.coordinates[0]
+      timestamp TIMESTAMP,       -- Converted from timestampExternal
+      raw_json JSONB             -- Full JSON feature for reference
+  );
+
+  CREATE TABLE predictions (
+      vessel_id BIGINT PRIMARY KEY,
+      predicted_latitude DOUBLE PRECISION,
+      predicted_longitude DOUBLE PRECISION,
+      prediction_for_timestamp TIMESTAMP,
+      prediction_made_at TIMESTAMP
+  );
+  ```
 
 ### 4. Run the Application
 ```bash
 # Start the MQTT client
-python3 mqtt_client.py
+python mqtt_client.py
 
 # Start the prediction service
-python3 prediction_service.py
+python prediction_service.py
 
 # Start the MQTT streaming service
 python ais_streaming.py
+
+# Start the FastAPI server
+python api_server.py
 ```
 
 ### 5. Access the Application
@@ -114,7 +144,7 @@ navicast/
 
 ## How It Works
 1. **Data Ingestion**: AIS data is streamed in real-time from Digitraffic via MQTT, processed in batches, and stored in PostgreSQL.
-2. **Prediction Generation**: A tuned XGBoost model predicts vessel positions based on features like speed, course, and time differences, with results stored in the predictions table.
+2. **Prediction Generation**: A tuned XGBoost model predicts vessel positions based on features like speed, course, and time differences, with results stored in the `predictions` table.
 3. **Visualization**: The frontend fetches data via the FastAPI endpoint `/vessels`, rendering it on an interactive map with current and predicted positions.
 
 ## Performance Metrics
@@ -137,8 +167,12 @@ navicast/
 - Enhance the UI with vessel details and historical tracks.
 - Deploy on a cloud service for global accessibility.
 
+## Acknowledgments
+- Digitraffic for providing real-time AIS data.
+- The open-source community for tools like Leaflet.js, XGBoost, and PostgreSQL.
+
 ## Contact
 Created by Imad Eddine
 
 - Email: imadeddine200507@gmail.com
-- LinkedIn: www.linkedin.com/in/imad-eddine-el-mouss-986741262
+- LinkedIn: [www.linkedin.com/in/imad-eddine-el-mouss-986741262](https://www.linkedin.com/in/imad-eddine-el-mouss-986741262)
