@@ -6,7 +6,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-blue)](https://www.postgresql.org/)
 
 <p align="center">
-  <img src="static/NAVICAST-logo/logo-white.svg" alt="NAVICAST Logo" width="300">
+  <img src="static/NAVICAST-logo/vector/default-monochrome.svg" alt="NAVICAST Logo" width="300">
 </p>
 
 <p align="center">
