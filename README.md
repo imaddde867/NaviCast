@@ -118,9 +118,6 @@ python mqtt_client.py
 # Start the prediction service
 python prediction_service.py
 
-# Start the MQTT streaming service
-python ais_streaming.py
-
 # Start the FastAPI server
 python api_server.py
 ```
