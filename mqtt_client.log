@@ -12679,3 +12679,411 @@ Mon Mar 31 03:14:47 2025: Cleaned up old records
 Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/265577480/location: {'time': 1743380087, 'sog': 0.1, 'cog': 110.2, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 241, 'lon': 18.44727, 'lat': 60.34094}
 Mon Mar 31 03:14:47 2025: Added to batch: lat=60.34094, lon=18.44727
 Mon Mar 31 03:14:47 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:47 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:47 2025: Cleaned up old records
+Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/230115340/location: {'time': 1743380087, 'sog': 0.0, 'cog': 357.1, 'navStat': 15, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 280, 'lon': 21.464642, 'lat': 61.594332}
+Mon Mar 31 03:14:47 2025: Added to batch: lat=61.594332, lon=21.464642
+Mon Mar 31 03:14:47 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:47 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:47 2025: Cleaned up old records
+Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/230017340/location: {'time': 1743380087, 'sog': 0.0, 'cog': 342.9, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 29, 'lon': 23.946032, 'lat': 60.013452}
+Mon Mar 31 03:14:47 2025: Added to batch: lat=60.013452, lon=23.946032
+Mon Mar 31 03:14:47 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:47 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:47 2025: Cleaned up old records
+Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/230991780/location: {'time': 1743380087, 'sog': 0.0, 'cog': 307.1, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 133, 'lon': 21.440642, 'lat': 61.133455}
+Mon Mar 31 03:14:47 2025: Added to batch: lat=61.133455, lon=21.440642
+Mon Mar 31 03:14:47 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:47 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:47 2025: Cleaned up old records
+Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/276001840/location: {'time': 1743380087, 'sog': 0.0, 'cog': 336.4, 'navStat': 15, 'rot': -128, 'posAcc': False, 'raim': True, 'heading': 511, 'lon': 24.813965, 'lat': 59.499322}
+Mon Mar 31 03:14:47 2025: Added to batch: lat=59.499322, lon=24.813965
+Mon Mar 31 03:14:47 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:47 2025: Skipped vessel 276001840 due to invalid heading: 511
+Mon Mar 31 03:14:47 2025: No valid records to insert
+Mon Mar 31 03:14:47 2025: Cleaned up old records
+Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/230685000/location: {'time': 1743380087, 'sog': 12.2, 'cog': 188.6, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 189, 'lon': 25.22072, 'lat': 60.18939}
+Mon Mar 31 03:14:47 2025: Added to batch: lat=60.18939, lon=25.22072
+Mon Mar 31 03:14:47 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:47 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:47 2025: Cleaned up old records
+Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/230011000/location: {'time': 1743380087, 'sog': 9.4, 'cog': 35.6, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 35, 'lon': 18.675842, 'lat': 58.696393}
+Mon Mar 31 03:14:47 2025: Added to batch: lat=58.696393, lon=18.675842
+Mon Mar 31 03:14:47 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:47 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:47 2025: Cleaned up old records
+Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/230982000/location: {'time': 1743380087, 'sog': 22.1, 'cog': 53.9, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 54, 'lon': 21.845415, 'lat': 59.086487}
+Mon Mar 31 03:14:47 2025: Added to batch: lat=59.086487, lon=21.845415
+Mon Mar 31 03:14:47 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:47 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:47 2025: Cleaned up old records
+Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/265587000/location: {'time': 1743380087, 'sog': 0.0, 'cog': 347.4, 'navStat': 0, 'rot': -128, 'posAcc': False, 'raim': True, 'heading': 511, 'lon': 19.081672, 'lat': 59.752145}
+Mon Mar 31 03:14:47 2025: Added to batch: lat=59.752145, lon=19.081672
+Mon Mar 31 03:14:47 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:47 2025: Skipped vessel 265587000 due to invalid heading: 511
+Mon Mar 31 03:14:47 2025: No valid records to insert
+Mon Mar 31 03:14:47 2025: Cleaned up old records
+Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/275513000/location: {'time': 1743380087, 'sog': 0.0, 'cog': 183.9, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 5, 'lon': 21.38424, 'lat': 61.631948}
+Mon Mar 31 03:14:47 2025: Added to batch: lat=61.631948, lon=21.38424
+Mon Mar 31 03:14:47 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:47 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:47 2025: Cleaned up old records
+Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/230099540/location: {'time': 1743380087, 'sog': 0.0, 'cog': 304.3, 'navStat': 0, 'rot': -128, 'posAcc': True, 'raim': False, 'heading': 511, 'lon': 20.365417, 'lat': 60.33108}
+Mon Mar 31 03:14:47 2025: Added to batch: lat=60.33108, lon=20.365417
+Mon Mar 31 03:14:47 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:47 2025: Skipped vessel 230099540 due to invalid heading: 511
+Mon Mar 31 03:14:47 2025: No valid records to insert
+Mon Mar 31 03:14:47 2025: Cleaned up old records
+Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/538010510/location: {'time': 1743380087, 'sog': 11.5, 'cog': 35.8, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 37, 'lon': 21.428988, 'lat': 58.853733}
+Mon Mar 31 03:14:47 2025: Added to batch: lat=58.853733, lon=21.428988
+Mon Mar 31 03:14:47 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:47 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:47 2025: Cleaned up old records
+Mon Mar 31 03:14:47 2025: Received AIS message on topic vessels-v2/230713000/metadata: {'timestamp': 1743380088000, 'destination': 'FIHEL<>FIMHQ<>SESTO', 'name': 'VIKING CINDERELLA', 'draught': 67, 'eta': 260608, 'posType': 1, 'refA': 23, 'refB': 166, 'refC': 17, 'refD': 17, 'callSign': 'OIZS', 'imo': 8719188, 'type': 60}
+Mon Mar 31 03:14:47 2025: Message skipped (no lat/lon): {'timestamp': 1743380088000, 'destination': 'FIHEL<>FIMHQ<>SESTO', 'name': 'VIKING CINDERELLA', 'draught': 67, 'eta': 260608, 'posType': 1, 'refA': 23, 'refB': 166, 'refC': 17, 'refD': 17, 'callSign': 'OIZS', 'imo': 8719188, 'type': 60}
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/236553000/location: {'time': 1743380088, 'sog': 10.5, 'cog': 16.4, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 20, 'lon': 20.190432, 'lat': 62.426192}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=62.426192, lon=20.190432
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/265602050/location: {'time': 1743380088, 'sog': 0.0, 'cog': 360.0, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': True, 'heading': 301, 'lon': 18.705702, 'lat': 59.28691}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.28691, lon=18.705702
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/230991010/location: {'time': 1743380088, 'sog': 0.0, 'cog': 324.2, 'navStat': 15, 'rot': -128, 'posAcc': False, 'raim': False, 'heading': 511, 'lon': 22.238733, 'lat': 60.436937}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=60.436937, lon=22.238733
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Skipped vessel 230991010 due to invalid heading: 511
+Mon Mar 31 03:14:48 2025: No valid records to insert
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/273219190/location: {'time': 1743380088, 'sog': 9.0, 'cog': 72.9, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': True, 'heading': 75, 'lon': 26.615763, 'lat': 59.987408}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.987408, lon=26.615763
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/230011590/location: {'time': 1743380088, 'sog': 0.0, 'cog': 178.0, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 354, 'lon': 24.557283, 'lat': 65.040513}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=65.040513, lon=24.557283
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/276538000/location: {'time': 1743380088, 'sog': 0.0, 'cog': 0.0, 'navStat': 0, 'rot': -128, 'posAcc': False, 'raim': False, 'heading': 511, 'lon': 24.707163, 'lat': 59.457775}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.457775, lon=24.707163
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Skipped vessel 276538000 due to invalid heading: 511
+Mon Mar 31 03:14:48 2025: No valid records to insert
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/265762030/location: {'time': 1743380088, 'sog': 0.0, 'cog': 360.0, 'navStat': 15, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 286, 'lon': 19.080685, 'lat': 59.752163}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.752163, lon=19.080685
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/230291000/metadata: {'timestamp': 1743380088281, 'destination': 'HELSINKI', 'name': 'VOIMA', 'draught': 65, 'eta': 666432, 'posType': 1, 'refA': 25, 'refB': 59, 'refC': 12, 'refD': 8, 'callSign': 'OHLW', 'imo': 5383158, 'type': 90}
+Mon Mar 31 03:14:48 2025: Message skipped (no lat/lon): {'timestamp': 1743380088281, 'destination': 'HELSINKI', 'name': 'VOIMA', 'draught': 65, 'eta': 666432, 'posType': 1, 'refA': 25, 'refB': 59, 'refC': 12, 'refD': 8, 'callSign': 'OHLW', 'imo': 5383158, 'type': 90}
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/265767620/location: {'time': 1743380088, 'sog': 0.0, 'cog': 360.0, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 50, 'lon': 19.015317, 'lat': 59.626517}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.626517, lon=19.015317
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/230163320/location: {'time': 1743380088, 'sog': 0.0, 'cog': 103.0, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 56, 'lon': 22.261165, 'lat': 60.196327}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=60.196327, lon=22.261165
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/276832000/location: {'time': 1743380088, 'sog': 0.0, 'cog': 325.6, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': True, 'heading': 301, 'lon': 24.940142, 'lat': 59.497655}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.497655, lon=24.940142
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/230642000/location: {'time': 1743380088, 'sog': 17.1, 'cog': 52.9, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 52, 'lon': 22.563025, 'lat': 59.406043}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.406043, lon=22.563025
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/265004000/location: {'time': 1743380088, 'sog': 16.7, 'cog': 338.8, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 340, 'lon': 19.982913, 'lat': 59.890355}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.890355, lon=19.982913
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/230174300/location: {'time': 1743380088, 'sog': 0.0, 'cog': 267.9, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 270, 'lon': 21.059277, 'lat': 60.503212}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=60.503212, lon=21.059277
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/276636000/location: {'time': 1743380088, 'sog': 0.0, 'cog': 355.1, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 133, 'lon': 24.672483, 'lat': 59.450667}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.450667, lon=24.672483
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/210017000/location: {'time': 1743380088, 'sog': 13.8, 'cog': 62.7, 'navStat': 0, 'rot': -127, 'posAcc': False, 'raim': False, 'heading': 57, 'lon': 24.873043, 'lat': 59.786047}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.786047, lon=24.873043
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/273446580/location: {'time': 1743380088, 'sog': 5.7, 'cog': 252.9, 'navStat': 0, 'rot': -4, 'posAcc': True, 'raim': True, 'heading': 257, 'lon': 23.534422, 'lat': 59.663903}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.663903, lon=23.534422
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/314992000/location: {'time': 1743380088, 'sog': 12.4, 'cog': 70.2, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 69, 'lon': 23.379902, 'lat': 59.540998}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.540998, lon=23.379902
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/305804000/location: {'time': 1743380088, 'sog': 10.9, 'cog': 247.1, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 246, 'lon': 22.474252, 'lat': 59.588763}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.588763, lon=22.474252
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/230045250/location: {'time': 1743380088, 'sog': 0.0, 'cog': 139.3, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 213, 'lon': 21.37057, 'lat': 59.782247}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.782247, lon=21.37057
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/276260000/location: {'time': 1743380088, 'sog': 0.0, 'cog': 358.6, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 251, 'lon': 24.70826, 'lat': 59.457938}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.457938, lon=24.70826
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/230286000/location: {'time': 1743380088, 'sog': 0.7, 'cog': 21.4, 'navStat': 0, 'rot': -127, 'posAcc': True, 'raim': True, 'heading': 230, 'lon': 25.559613, 'lat': 60.310275}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=60.310275, lon=25.559613
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/305641000/location: {'time': 1743380088, 'sog': 10.7, 'cog': 256.3, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 254, 'lon': 26.116193, 'lat': 59.96294}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.96294, lon=26.116193
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/265537680/location: {'time': 1743380088, 'sog': 0.0, 'cog': 350.0, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 301, 'lon': 23.277047, 'lat': 65.797995}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=65.797995, lon=23.277047
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/230168060/location: {'time': 1743380088, 'sog': 0.0, 'cog': 21.4, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 20, 'lon': 22.112045, 'lat': 60.234847}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=60.234847, lon=22.112045
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/230703000/location: {'time': 1743380088, 'sog': 14.7, 'cog': 111.2, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 110, 'lon': 20.80192, 'lat': 60.084372}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=60.084372, lon=20.80192
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:48 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:48 2025: Cleaned up old records
+Mon Mar 31 03:14:48 2025: Received AIS message on topic vessels-v2/219222000/location: {'time': 1743380088, 'sog': 10.5, 'cog': 253.1, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 253, 'lon': 23.133313, 'lat': 59.603673}
+Mon Mar 31 03:14:48 2025: Added to batch: lat=59.603673, lon=23.133313
+Mon Mar 31 03:14:48 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230993710/metadata: {'timestamp': 1743380089046, 'destination': 'AVUSTUS', 'name': 'MATARI', 'draught': 30, 'eta': 807744, 'posType': 1, 'refA': 68, 'refB': 16, 'refC': 10, 'refD': 8, 'callSign': 'OHA3777', 'imo': 8634522, 'type': 70}
+Mon Mar 31 03:14:49 2025: Message skipped (no lat/lon): {'timestamp': 1743380089046, 'destination': 'AVUSTUS', 'name': 'MATARI', 'draught': 30, 'eta': 807744, 'posType': 1, 'refA': 68, 'refB': 16, 'refC': 10, 'refD': 8, 'callSign': 'OHA3777', 'imo': 8634522, 'type': 70}
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/538004096/location: {'time': 1743380089, 'sog': 10.2, 'cog': 75.4, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 78, 'lon': 25.917375, 'lat': 59.885205}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=59.885205, lon=25.917375
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230645000/location: {'time': 1743380089, 'sog': 7.6, 'cog': 135.2, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 134, 'lon': 22.718857, 'lat': 65.36097}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=65.36097, lon=22.718857
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/273293820/location: {'time': 1743380089, 'sog': 12.7, 'cog': 103.7, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 103, 'lon': 27.941603, 'lat': 60.15541}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=60.15541, lon=27.941603
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/status: {'updated': 1743380089}
+Mon Mar 31 03:14:49 2025: Message skipped (no lat/lon): {'updated': 1743380089}
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/265523880/location: {'time': 1743380089, 'sog': 0.0, 'cog': 360.0, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 326, 'lon': 18.752883, 'lat': 59.46525}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=59.46525, lon=18.752883
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230639000/location: {'time': 1743380089, 'sog': 16.4, 'cog': 255.3, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 256, 'lon': 19.160633, 'lat': 59.728458}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=59.728458, lon=19.160633
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230031000/location: {'time': 1743380089, 'sog': 0.1, 'cog': 219.9, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 81, 'lon': 24.705705, 'lat': 60.166253}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=60.166253, lon=24.705705
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/235112571/location: {'time': 1743380089, 'sog': 13.8, 'cog': 136.3, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 136, 'lon': 19.999333, 'lat': 59.597}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=59.597, lon=19.999333
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/246639000/location: {'time': 1743380089, 'sog': 0.0, 'cog': 173.0, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 173, 'lon': 27.170802, 'lat': 60.53475}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=60.53475, lon=27.170802
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230022010/location: {'time': 1743380089, 'sog': 0.0, 'cog': 135.3, 'navStat': 15, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 154, 'lon': 25.62382, 'lat': 60.205687}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=60.205687, lon=25.62382
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/265054000/location: {'time': 1743380089, 'sog': 0.0, 'cog': 320.0, 'navStat': 2, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 164, 'lon': 23.324838, 'lat': 65.749355}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=65.749355, lon=23.324838
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/276015540/location: {'time': 1743380089, 'sog': 0.0, 'cog': 0.0, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 280, 'lon': 24.738002, 'lat': 59.455132}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=59.455132, lon=24.738002
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/258152000/location: {'time': 1743380089, 'sog': 1.6, 'cog': 85.4, 'navStat': 0, 'rot': -127, 'posAcc': True, 'raim': False, 'heading': 264, 'lon': 25.55864, 'lat': 60.309955}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=60.309955, lon=25.55864
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/266314000/location: {'time': 1743380089, 'sog': 0.5, 'cog': 198.2, 'navStat': 0, 'rot': -7, 'posAcc': True, 'raim': False, 'heading': 90, 'lon': 19.288432, 'lat': 59.819607}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=59.819607, lon=19.288432
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/256800000/location: {'time': 1743380089, 'sog': 0.0, 'cog': 318.9, 'navStat': 5, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 319, 'lon': 26.90714, 'lat': 60.422782}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=60.422782, lon=26.90714
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230938890/location: {'time': 1743380089, 'sog': 0.0, 'cog': 300.5, 'navStat': 0, 'rot': -128, 'posAcc': False, 'raim': True, 'heading': 511, 'lon': 28.886518, 'lat': 61.866655}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=61.866655, lon=28.886518
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Skipped vessel 230938890 due to invalid heading: 511
+Mon Mar 31 03:14:49 2025: No valid records to insert
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230111190/location: {'time': 1743380089, 'sog': 0.0, 'cog': 337.6, 'navStat': 0, 'rot': -128, 'posAcc': False, 'raim': True, 'heading': 511, 'lon': 23.7172, 'lat': 64.220722}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=64.220722, lon=23.7172
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Skipped vessel 230111190 due to invalid heading: 511
+Mon Mar 31 03:14:49 2025: No valid records to insert
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230035990/location: {'time': 1743380089, 'sog': 0.0, 'cog': 339.8, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 74, 'lon': 20.788353, 'lat': 60.29027}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=60.29027, lon=20.788353
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/538004096/metadata: {'timestamp': 1743380089575, 'destination': 'EE SLM', 'name': 'SFL HUDSON', 'draught': 65, 'eta': 260702, 'posType': 1, 'refA': 162, 'refB': 28, 'refC': 21, 'refD': 11, 'callSign': 'V7VD7', 'imo': 9525821, 'type': 70}
+Mon Mar 31 03:14:49 2025: Message skipped (no lat/lon): {'timestamp': 1743380089575, 'destination': 'EE SLM', 'name': 'SFL HUDSON', 'draught': 65, 'eta': 260702, 'posType': 1, 'refA': 162, 'refB': 28, 'refC': 21, 'refD': 11, 'callSign': 'V7VD7', 'imo': 9525821, 'type': 70}
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230992740/location: {'time': 1743380089, 'sog': 0.0, 'cog': 0.0, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 275, 'lon': 22.03231, 'lat': 60.451168}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=60.451168, lon=22.03231
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230003110/location: {'time': 1743380089, 'sog': 0.0, 'cog': 221.9, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 96, 'lon': 24.406422, 'lat': 64.66636}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=64.66636, lon=24.406422
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230070870/location: {'time': 1743380089, 'sog': 0.0, 'cog': 11.3, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 193, 'lon': 24.514892, 'lat': 65.673633}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=65.673633, lon=24.514892
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/265794080/location: {'time': 1743380089, 'sog': 0.0, 'cog': 332.8, 'navStat': 0, 'rot': -128, 'posAcc': False, 'raim': True, 'heading': 511, 'lon': 19.081545, 'lat': 59.752182}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=59.752182, lon=19.081545
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Skipped vessel 265794080 due to invalid heading: 511
+Mon Mar 31 03:14:49 2025: No valid records to insert
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/277569000/location: {'time': 1743380089, 'sog': 15.6, 'cog': 283.0, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 283, 'lon': 21.47726, 'lat': 59.582052}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=59.582052, lon=21.47726
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230011480/location: {'time': 1743380089, 'sog': 0.0, 'cog': 296.7, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 221, 'lon': 21.074527, 'lat': 60.51586}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=60.51586, lon=21.074527
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230629000/location: {'time': 1743380089, 'sog': 17.9, 'cog': 239.6, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 240, 'lon': 19.403642, 'lat': 59.781372}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=59.781372, lon=19.403642
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/255915979/location: {'time': 1743380089, 'sog': 11.9, 'cog': 233.3, 'navStat': 0, 'rot': -2, 'posAcc': True, 'raim': False, 'heading': 232, 'lon': 21.870918, 'lat': 59.233583}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=59.233583, lon=21.870918
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/265411000/location: {'time': 1743380089, 'sog': 14.8, 'cog': 12.0, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 11, 'lon': 19.658715, 'lat': 61.698992}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=61.698992, lon=19.658715
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230046990/location: {'time': 1743380089, 'sog': 0.0, 'cog': 335.3, 'navStat': 0, 'rot': -128, 'posAcc': True, 'raim': True, 'heading': 511, 'lon': 22.9148, 'lat': 59.809942}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=59.809942, lon=22.9148
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Skipped vessel 230046990 due to invalid heading: 511
+Mon Mar 31 03:14:49 2025: No valid records to insert
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/273618890/location: {'time': 1743380089, 'sog': 11.3, 'cog': 52.5, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 54, 'lon': 22.207427, 'lat': 59.26462}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=59.26462, lon=22.207427
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230117660/location: {'time': 1743380089, 'sog': 0.0, 'cog': 143.6, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 318, 'lon': 21.809077, 'lat': 60.394663}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=60.394663, lon=21.809077
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:49 2025: Received AIS message on topic vessels-v2/230282000/location: {'time': 1743380089, 'sog': 0.0, 'cog': 316.3, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 281, 'lon': 21.48447, 'lat': 61.595013}
+Mon Mar 31 03:14:49 2025: Added to batch: lat=61.595013, lon=21.48447
+Mon Mar 31 03:14:49 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:49 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:49 2025: Cleaned up old records
+Mon Mar 31 03:14:50 2025: Received AIS message on topic vessels-v2/230289000/location: {'time': 1743380090, 'sog': 0.0, 'cog': 236.9, 'navStat': 2, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 29, 'lon': 24.67001, 'lat': 65.145672}
+Mon Mar 31 03:14:50 2025: Added to batch: lat=65.145672, lon=24.67001
+Mon Mar 31 03:14:50 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:50 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:50 2025: Cleaned up old records
+Mon Mar 31 03:14:50 2025: Received AIS message on topic vessels-v2/230005750/location: {'time': 1743380090, 'sog': 0.0, 'cog': 347.8, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 331, 'lon': 24.557102, 'lat': 65.040477}
+Mon Mar 31 03:14:50 2025: Added to batch: lat=65.040477, lon=24.557102
+Mon Mar 31 03:14:50 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:50 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:50 2025: Cleaned up old records
+Mon Mar 31 03:14:50 2025: Received AIS message on topic vessels-v2/230129940/location: {'time': 1743380090, 'sog': 0.0, 'cog': 107.1, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 130, 'lon': 20.27773, 'lat': 60.206}
+Mon Mar 31 03:14:50 2025: Added to batch: lat=60.206, lon=20.27773
+Mon Mar 31 03:14:50 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:50 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:50 2025: Cleaned up old records
+Mon Mar 31 03:14:50 2025: Received AIS message on topic vessels-v2/230175570/location: {'time': 1743380090, 'sog': 0.0, 'cog': 360.0, 'navStat': 5, 'rot': -3, 'posAcc': True, 'raim': True, 'heading': 309, 'lon': 19.53858, 'lat': 60.21934}
+Mon Mar 31 03:14:50 2025: Added to batch: lat=60.21934, lon=19.53858
+Mon Mar 31 03:14:50 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:50 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:50 2025: Cleaned up old records
+Mon Mar 31 03:14:50 2025: Received AIS message on topic vessels-v2/230943350/location: {'time': 1743380090, 'sog': 0.0, 'cog': 0.0, 'navStat': 0, 'rot': -128, 'posAcc': False, 'raim': True, 'heading': 511, 'lon': 22.219613, 'lat': 60.43255}
+Mon Mar 31 03:14:50 2025: Added to batch: lat=60.43255, lon=22.219613
+Mon Mar 31 03:14:50 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:50 2025: Skipped vessel 230943350 due to invalid heading: 511
+Mon Mar 31 03:14:50 2025: No valid records to insert
+Mon Mar 31 03:14:50 2025: Cleaned up old records
+Mon Mar 31 03:14:50 2025: Received AIS message on topic vessels-v2/265811390/location: {'time': 1743380090, 'sog': 0.1, 'cog': 352.4, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': False, 'heading': 247, 'lon': 18.916875, 'lat': 59.658213}
+Mon Mar 31 03:14:50 2025: Added to batch: lat=59.658213, lon=18.916875
+Mon Mar 31 03:14:50 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:50 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:50 2025: Cleaned up old records
+Mon Mar 31 03:14:50 2025: Received AIS message on topic vessels-v2/230990880/location: {'time': 1743380090, 'sog': 0.0, 'cog': 87.0, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 59, 'lon': 21.693758, 'lat': 60.46716}
+Mon Mar 31 03:14:50 2025: Added to batch: lat=60.46716, lon=21.693758
+Mon Mar 31 03:14:50 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:50 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:50 2025: Cleaned up old records
+Mon Mar 31 03:14:50 2025: Received AIS message on topic vessels-v2/255806151/location: {'time': 1743380090, 'sog': 11.2, 'cog': 52.8, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 55, 'lon': 22.540077, 'lat': 59.372642}
+Mon Mar 31 03:14:50 2025: Added to batch: lat=59.372642, lon=22.540077
+Mon Mar 31 03:14:50 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:50 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:50 2025: Cleaned up old records
+Mon Mar 31 03:14:50 2025: Received AIS message on topic vessels-v2/212209000/location: {'time': 1743380090, 'sog': 9.9, 'cog': 0.3, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 2, 'lon': 19.030887, 'lat': 60.438827}
+Mon Mar 31 03:14:50 2025: Added to batch: lat=60.438827, lon=19.030887
+Mon Mar 31 03:14:50 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:50 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:50 2025: Cleaned up old records
+Mon Mar 31 03:14:50 2025: Received AIS message on topic vessels-v2/230169030/location: {'time': 1743380090, 'sog': 0.0, 'cog': 360.0, 'navStat': 0, 'rot': 0, 'posAcc': True, 'raim': True, 'heading': 135, 'lon': 24.983438, 'lat': 60.145973}
+Mon Mar 31 03:14:50 2025: Added to batch: lat=60.145973, lon=24.983438
+Mon Mar 31 03:14:50 2025: Starting store_raw_data_batch with 1 records
+Mon Mar 31 03:14:50 2025: Committed insertion of 1 records
+Mon Mar 31 03:14:50 2025: Cleaned up old records
+Mon Mar 31 03:14:50 2025: Received AIS message on topic vessels-v2/257550000/location: {'time': 1743380090, 'sog': 12.5, 'cog': 33.6, 'navStat': 0, 'rot': 0, 'posAcc': False, 'raim': False, 'heading': 34, 'lon': 19.344905, 'lat': 58.826572}
