@@ -32,10 +32,9 @@ def store_raw_data_batch(batch):
                 longitude = vessel["lon"]
                 timestamp_ms = vessel["time"] * 1000
                 raw_json = json.dumps(vessel)
-                properties = vessel.get("properties", {})
-                sog = properties.get("sog", 0)
-                cog = properties.get("cog", 0)
-                heading = properties.get("heading", 0)
+                sog = vessel.get("sog", 0)
+                cog = vessel.get("cog", 0)
+                heading = vessel.get("heading", 0)
 
                 if not (0 <= sog <= 50):
                     print(f"{time.ctime()}: Skipped vessel {vessel_id} due to invalid sog: {sog}")
@@ -57,7 +56,6 @@ def store_raw_data_batch(batch):
                 """
                 INSERT INTO raw_ais_data (vessel_id, latitude, longitude, timestamp, raw_json)
                 VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (vessel_id, timestamp) DO NOTHING
                 """,
                 values
             )

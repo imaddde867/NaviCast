@@ -27,9 +27,9 @@ def make_predictions():
             vessel_id, 
             latitude, 
             longitude, 
-            (raw_json -> 'properties' ->> 'sog')::float AS sog,
-            (raw_json -> 'properties' ->> 'cog')::float AS cog,
-            COALESCE((raw_json -> 'properties' ->> 'heading')::float, 0) AS heading,
+            (raw_json ->> 'sog')::float AS sog,
+            (raw_json ->> 'cog')::float AS cog,
+            COALESCE((raw_json ->> 'heading')::float, 0) AS heading,
             timestamp
         FROM raw_ais_data
         WHERE (vessel_id, timestamp) IN (
@@ -61,7 +61,15 @@ def make_predictions():
                 'sog': [sog if sog is not None else 0],
                 'cog': [cog if cog is not None else 0],
                 'heading': [heading if heading is not None else 0],
-                'time_diff': [300]
+                'time_diff': [300],
+                # Add missing features with default values
+                'navStat': [0],
+                'rot': [0],
+                'posAcc': [False],
+                'raim': [False], 
+                'delta_lat': [0],
+                'delta_lon': [0],
+                'is_water': [True]
             })
             
             try:
@@ -96,6 +104,10 @@ def make_predictions():
 
             prediction_for = timestamp + timedelta(seconds=300)
             prediction_made = datetime.now()
+
+            # Convert any numpy types to Python native types
+            predicted_lat = float(predicted_lat) if hasattr(predicted_lat, 'item') else predicted_lat
+            predicted_lon = float(predicted_lon) if hasattr(predicted_lon, 'item') else predicted_lon
 
             update_query = """
             INSERT INTO predictions (vessel_id, predicted_latitude, predicted_longitude, prediction_for_timestamp, prediction_made_at)
