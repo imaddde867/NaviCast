@@ -4,7 +4,7 @@ This document describes the data architecture of the NAVICAST system, detailing 
 
 ## Overview Diagram
 
-![System Architecture Diagram](static/diagram.png)
+![System Architecture Diagram](../static/diagram.png)
 
 ## Components and Data Flow
 
