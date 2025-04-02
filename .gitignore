@@ -49,6 +49,7 @@ Thumbs.db
 # Project specific
 *.pkl
 .env
+make_clean_repo.sh
 
 # Data files (can be regenerated)
 *.csv.gz

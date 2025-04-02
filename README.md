@@ -2,7 +2,9 @@
 
 NAVICAST is a comprehensive system for collecting, processing, and visualizing maritime vessel traffic data from AIS (Automatic Identification System) feeds. The platform provides real-time vessel tracking, trajectory prediction, and data querying capabilities.
 
-![NAVICAST Screenshot](static/NAVICAST-logo/logo-white.svg)
+<p align="center">
+  <img src="static/NAVICAST-logo/logo-white.svg" alt="NAVICAST Logo">
+</p>
 
 ## System Overview
 
@@ -32,11 +34,13 @@ The model was evaluated on its ability to predict vessel positions 30 minutes ah
 
 ### Prediction Visualization
 
-<!-- Map Visualization Placeholder -->
-![Vessel Prediction Map](static/dashboard.png)
+<p align="center">
+  <img src="static/dashboard.png" alt="Vessel Prediction Map">
+</p>
 
-<!-- Prediction Accuracy Plot Placeholder -->
-![Prediction Accuracy](static/accuracy.png)
+<p align="center">
+  <img src="static/accuracy.png" alt="Prediction Accuracy">
+</p>
 
 ### Vessel Tracking Details
 
@@ -48,7 +52,9 @@ The platform provides detailed information for each tracked vessel, including sp
 
 ## System Architecture
 
-![System Architecture Diagram](static/diagram.png)
+<p align="center">
+  <img src="static/diagram.png" alt="System Architecture Diagram">
+</p>
 
 ### Data Flow
 
@@ -199,54 +205,6 @@ Once all services are running:
    - `http://localhost:8000/vessels` - List all vessels
    - `http://localhost:8000/vessels/{vessel_id}` - Get details for a specific vessel
 
-## Cloud Deployment
-
-### Deploying on Render.com (Free Tier)
-
-NAVICAST can be deployed to the cloud using Render.com's free tier:
-
-### 1. Create a Render.com Account
-1. Go to [Render.com](https://render.com/) and sign up for a free account
-2. Verify your email address and log in
-
-### 2. Create a PostgreSQL Database
-1. In your Render dashboard, click on the "New +" button
-2. Select "PostgreSQL" from the dropdown menu
-3. Fill in the database details:
-   - Name: `navicast-db`
-   - Database: `ais_project`
-   - User: Leave as auto-generated
-   - Region: Select the region closest to your users
-   - PostgreSQL Version: 13 or higher
-   - Instance Type: Free tier
-4. Click "Create Database"
-5. Once created, note down the database connection details
-
-### 3. Create the Web Service
-1. Click on "New +" again and select "Web Service"
-2. Connect your GitHub repository
-3. Configure the web service:
-   - Name: `navicast-web`
-   - Environment: Python
-   - Build Command: `pip install -r requirements.txt`
-   - Start Command: `python api_server.py`
-   - Instance Type: Free
-4. Add the environment variable:
-   - `DATABASE_URL`: Internal Connection String from your database
-5. Click "Create Web Service"
-
-### 4. Create Worker Services
-Create two background worker services following the same steps as above:
-
-1. MQTT Client Worker:
-   - Start Command: `python mqtt_client.py`
-   
-2. Prediction Service Worker:
-   - Start Command: `python prediction_service.py`
-
-### 5. Access Your Application
-Your application will be available at the URL provided by Render (e.g., https://navicast-web.onrender.com)
-
 ## API Documentation
 
 The NAVICAST API provides the following endpoints:
@@ -273,3 +231,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Acknowledgments
 
 - Finnish Transport Agency for providing the AIS data
+- Turku University of Applied Sciences for supporting the project development
