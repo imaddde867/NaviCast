@@ -52,9 +52,9 @@ The system collects the following types of data:
 
 The database consists of two primary tables:
 
-**vessels table**:
+**raw_ais_data table**:
 - Stores current vessel information
-- One row per vessel (updated with most recent data)
+- One row per vessel message
 - Contains processed fields from AIS messages
 - Includes raw JSON for reference and additional processing
 
@@ -66,8 +66,8 @@ The database consists of two primary tables:
 
 ### 2.3 Data Retention
 
-- **Raw AIS Data**: Retained for 30 days by default
-- **Predictions**: Retained for 7 days by default
+- **Raw AIS Data**: Retained for 24 hours by default (configurable)
+- **Predictions**: Retained until superseded by newer predictions
 - **Retention Policy**: Configurable via database cleanup function
 - **Archive Policy**: Optional archiving of historical data to compressed files
 
@@ -106,7 +106,7 @@ Vessel trajectory predictions are generated through:
 
 1. Selection of vessels with sufficient data quality
 2. Analysis of recent movement patterns (speed, course)
-3. Application of prediction algorithm
+3. Application of prediction algorithm (machine learning model with fallback to dead reckoning)
 4. Validation of prediction results
 5. Storage of validated predictions
 
@@ -133,7 +133,7 @@ Data is accessible through:
 The API provides the following capabilities:
 
 - **Vessel Data Retrieval**: Current positions and information
-- **Filtering**: By vessel ID, time range, geographic area
+- **Filtering**: By vessel ID (MMSI), time range
 - **Download Formats**: JSON and CSV exports
 - **Real-time Updates**: Current vessel data
 
@@ -202,10 +202,13 @@ Minimum recommended specifications:
 
 The system relies on:
 
-- **PostgreSQL**: Database for data storage
-- **Python**: Application programming language
+- **PostgreSQL**: Database for data storage (13.0+)
+- **Python**: Application programming language (3.9+)
 - **FastAPI**: Web framework for API
 - **Paho-MQTT**: Library for MQTT communication
+- **Psycopg2**: PostgreSQL adapter for Python
+- **Pandas**: Data analysis library
+- **Scikit-learn**: Machine learning library
 - **Leaflet.js**: Library for map visualization
 
 ## 7. Ethics and Privacy
