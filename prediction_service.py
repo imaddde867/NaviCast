@@ -1,11 +1,17 @@
-import psycopg2
 import pandas as pd
-import joblib
-from datetime import datetime, timedelta
-import schedule
-import time
-import logging
 import numpy as np
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import joblib
+import logging
+from logging.handlers import RotatingFileHandler
+import time
+import schedule
+import traceback
+import os
+import urllib.parse
+from datetime import datetime, timedelta
+from typing import Dict, List, Tuple, Optional, Any
 
 # Configure logging
 logging.basicConfig(
@@ -21,12 +27,29 @@ logger = logging.getLogger(__name__)
 # Constants
 MODEL_PATH = 'vessel_prediction_model.pkl'
 PREDICTION_INTERVAL = 1800  # 30 minutes in seconds
+
+# Database configuration
 DB_CONFIG = {
-    "dbname": "ais_project",
-    "user": "postgres",
-    "password": "120705imad",
-    "host": "localhost"
+    'dbname': 'ais_project',
+    'user': 'postgres',
+    'password': '120705imad',
+    'host': 'localhost'
 }
+
+# Use DATABASE_URL environment variable if available (for Render.com)
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if DATABASE_URL:
+    logger.info(f"Using DATABASE_URL from environment")
+    # Parse the connection string
+    parsed_url = urllib.parse.urlparse(DATABASE_URL)
+    DB_CONFIG = {
+        "dbname": parsed_url.path[1:],
+        "user": parsed_url.username,
+        "password": parsed_url.password,
+        "host": parsed_url.hostname,
+        "port": parsed_url.port or 5432
+    }
+
 # Baltic Sea boundaries (for validation)
 LAT_MIN = 53
 LAT_MAX = 66

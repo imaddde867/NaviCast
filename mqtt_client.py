@@ -5,6 +5,8 @@ from datetime import datetime
 import time
 import uuid
 import logging
+import os
+import urllib.parse
 
 # Configure logging
 logging.basicConfig(
@@ -21,12 +23,27 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE = 10
 APP_NAME = 'Navicast/MQTT_Client_1.0'
 STREAM_DURATION = 3600 * 24  # 24 hours
-DB_CONFIG = {
-    "dbname": "ais_project",
-    "user": "postgres",
-    "password": "120705imad",
-    "host": "localhost"
-}
+
+# Use DATABASE_URL environment variable if available (for Render.com)
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if DATABASE_URL:
+    logger.info(f"Using DATABASE_URL from environment")
+    # Parse the connection string
+    parsed_url = urllib.parse.urlparse(DATABASE_URL)
+    DB_CONFIG = {
+        "dbname": parsed_url.path[1:],
+        "user": parsed_url.username,
+        "password": parsed_url.password,
+        "host": parsed_url.hostname,
+        "port": parsed_url.port or 5432
+    }
+else:
+    DB_CONFIG = {
+        "dbname": "ais_project",
+        "user": "postgres",
+        "password": "120705imad",
+        "host": "localhost"
+    }
 
 # Global variables
 batch = []

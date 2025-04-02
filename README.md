@@ -95,15 +95,6 @@ The platform provides detailed information for each tracked vessel, including sp
 - **Visualization**: Web-based interactive map for vessel movement tracking
 - **Authentication**: None in the current version (intended for private deployment)
 
-## Technical Requirements
-
-### System Requirements
-
-- **Operating System**: Linux, macOS, or Windows
-- **CPU**: Dual-core 2.0+ GHz
-- **RAM**: 4GB minimum, 8GB recommended
-- **Storage**: 20GB minimum for database
-
 ### Software Dependencies
 
 - **PostgreSQL**: 13.0+
