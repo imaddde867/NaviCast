@@ -3,43 +3,39 @@
 
 -- Create database
 -- Run this command separately first: 
--- CREATE DATABASE ais_data;
+-- CREATE DATABASE ais_project;
 
 -- Connect to the database
-\c ais_data;
+\c ais_project;
 
 -- Drop tables if they exist (for clean setup)
 DROP TABLE IF EXISTS predictions;
-DROP TABLE IF EXISTS vessels;
+DROP TABLE IF EXISTS raw_ais_data;
 
--- Create vessels table
-CREATE TABLE vessels (
-    vessel_id INTEGER PRIMARY KEY,
+-- Create raw AIS data table
+CREATE TABLE raw_ais_data (
+    vessel_id INTEGER NOT NULL,
     latitude DOUBLE PRECISION NOT NULL,
     longitude DOUBLE PRECISION NOT NULL,
-    sog DOUBLE PRECISION,
-    cog DOUBLE PRECISION,
-    heading INTEGER,
-    nav_stat INTEGER,
-    pos_acc BOOLEAN,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-    raw_json JSONB
+    raw_json JSONB,
+    PRIMARY KEY (vessel_id, timestamp)
 );
 
 -- Create predictions table
 CREATE TABLE predictions (
-    id SERIAL PRIMARY KEY,
-    vessel_id INTEGER REFERENCES vessels(vessel_id),
-    latitude DOUBLE PRECISION NOT NULL,
-    longitude DOUBLE PRECISION NOT NULL,
+    vessel_id INTEGER NOT NULL,
+    predicted_latitude DOUBLE PRECISION NOT NULL,
+    predicted_longitude DOUBLE PRECISION NOT NULL,
     prediction_for_timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     prediction_made_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (vessel_id),
     CONSTRAINT unique_vessel_prediction UNIQUE (vessel_id, prediction_for_timestamp)
 );
 
 -- Create indices for faster queries
-CREATE INDEX idx_vessels_timestamp ON vessels(timestamp);
-CREATE INDEX idx_predictions_vessel_id ON predictions(vessel_id);
+CREATE INDEX idx_raw_ais_data_timestamp ON raw_ais_data(timestamp);
+CREATE INDEX idx_raw_ais_data_vessel_id ON raw_ais_data(vessel_id);
 CREATE INDEX idx_predictions_timestamp ON predictions(prediction_for_timestamp);
 
 -- Create a function to clean up old data (optional)
@@ -55,7 +51,7 @@ BEGIN
     WHERE prediction_made_at < cutoff_date;
     
     -- Delete old vessel data
-    DELETE FROM vessels 
+    DELETE FROM raw_ais_data 
     WHERE timestamp < cutoff_date;
     
     RAISE NOTICE 'Deleted vessel and prediction data older than %', cutoff_date;
@@ -64,6 +60,6 @@ $$ LANGUAGE plpgsql;
 
 -- Create a role for the application (if needed)
 -- CREATE ROLE navicast WITH LOGIN PASSWORD 'your_secure_password';
--- GRANT ALL PRIVILEGES ON DATABASE ais_data TO navicast;
+-- GRANT ALL PRIVILEGES ON DATABASE ais_project TO navicast;
 -- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO navicast;
 -- GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO navicast;

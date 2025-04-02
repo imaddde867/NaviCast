@@ -108,7 +108,40 @@
             width: 250px;
             backdrop-filter: blur(10px);
             border: 1px solid var(--panel-border);
-            transition: background-color 0.3s ease, border-color 0.3s ease;
+            transition: background-color 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+        }
+
+        .control-panel.collapsed {
+            transform: translateX(calc(100% - 30px));
+        }
+
+        .panel-toggle {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%) translateX(-50%);
+            background: var(--panel-bg);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            border: 1px solid var(--panel-border);
+            z-index: 991;
+            transition: background-color 0.3s ease;
+        }
+
+        .panel-toggle i {
+            color: var(--secondary-blue);
+            font-size: 0.85rem;
+            transition: transform 0.3s ease;
+        }
+
+        .control-panel.collapsed .panel-toggle i {
+            transform: rotate(180deg);
         }
 
         .control-section {
@@ -479,10 +512,35 @@
                 width: 220px;
             }
             
+            .control-panel.collapsed {
+                transform: translateX(calc(100% - 25px));
+            }
+            
             .time-footer {
                 padding: 0 1rem;
                 font-size: 0.8rem;
             }
+        }
+
+        /* Vessel direction indicator */
+        .vessel-direction {
+            position: absolute;
+            width: 0;
+            height: 0;
+            left: 50%;
+            top: 50%;
+            transform-origin: center;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 12px solid rgba(255, 255, 255, 0.8);
+            margin-left: -6px;
+            margin-top: -2px;
+            pointer-events: none;
+            transition: transform 0.3s ease;
+        }
+            
+        [data-theme="dark"] .vessel-direction {
+            border-bottom-color: rgba(33, 33, 33, 0.8);
         }
     </style>
 </head>
@@ -504,7 +562,10 @@
 
     <div id="map"></div>
 
-    <div class="control-panel">
+    <div class="control-panel" id="control-panel">
+        <div class="panel-toggle" id="panel-toggle">
+            <i class="fas fa-chevron-right"></i>
+        </div>
         <div class="control-section">
             <div class="control-title">Display Options</div>
             <div class="control-item">
@@ -613,7 +674,6 @@
         let countdown = 10;
         let showPredictionLines = true;
         let hasPredictions = false;
-        let loadingProgress = 0;
         
         // Map initialization with improved settings
         const map = L.map('map', {
@@ -629,7 +689,7 @@
             position: 'bottomleft'
         }).addTo(map);
 
-        // Choose map tile layers based on theme
+        // Tile layers
         const lightTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/attribution">CARTO</a>',
             maxZoom: 18
@@ -643,97 +703,81 @@
         // Start with light theme
         lightTileLayer.addTo(map);
 
-        // Center map on Finnish waters with animation
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            initPanelState();
+            updateTimeDisplays();
+            updateVesselDisplay();
+        });
+        
+        document.getElementById('panel-toggle').addEventListener('click', toggleControlPanel);
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'p' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                toggleControlPanel();
+            }
+        });
+        
         document.getElementById('center-map').addEventListener('click', () => {
-            map.flyTo([60.5, 22.5], 7, {
-                duration: 1.5
-            });
+            map.flyTo([60.5, 22.5], 7, { duration: 1.5 });
         });
 
-        // Toggle predictions
         document.getElementById('toggle-predictions').addEventListener('change', function(e) {
             showPredictionLines = this.checked;
             
-            // Update all vessels to show/hide predictions
             vessels.forEach(vessel => {
                 if (vessel.predictionLine) {
-                    if (showPredictionLines) {
-                        map.addLayer(vessel.predictionLine);
-                    } else {
-                        map.removeLayer(vessel.predictionLine);
-                    }
+                    showPredictionLines ? map.addLayer(vessel.predictionLine) : map.removeLayer(vessel.predictionLine);
                 }
                 
                 if (vessel.predictionMarker) {
-                    if (showPredictionLines) {
-                        map.addLayer(vessel.predictionMarker);
-                    } else {
-                        map.removeLayer(vessel.predictionMarker);
-                    }
+                    showPredictionLines ? map.addLayer(vessel.predictionMarker) : map.removeLayer(vessel.predictionMarker);
                 }
             });
         });
 
-        // Toggle dark/light theme
         document.getElementById('toggle-theme').addEventListener('change', function(e) {
             const isDarkMode = this.checked;
             
+            document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
             if (isDarkMode) {
-                document.documentElement.setAttribute('data-theme', 'dark');
                 map.removeLayer(lightTileLayer);
                 darkTileLayer.addTo(map);
             } else {
-                document.documentElement.setAttribute('data-theme', 'light');
                 map.removeLayer(darkTileLayer);
                 lightTileLayer.addTo(map);
             }
             
-            // Update marker colors for existing vessels
+            // Update marker colors
             const borderColor = isDarkMode ? 
                 getComputedStyle(document.documentElement).getPropertyValue('--marker-border').trim() : 
                 '#FFFFFF';
                 
             vessels.forEach(vessel => {
-                if (vessel.marker) {
-                    vessel.marker.setStyle({ color: borderColor });
-                }
-                if (vessel.predictionMarker) {
-                    vessel.predictionMarker.setStyle({ color: borderColor });
-                }
+                vessel.marker?.setStyle({ color: borderColor });
+                vessel.predictionMarker?.setStyle({ color: borderColor });
             });
         });
 
-        // Loading animation
-        function updateLoadingProgress(progress) {
-            loadingProgress = Math.min(progress, 100);
-            const progressBar = document.getElementById('loader-progress-bar');
-            progressBar.style.width = `${loadingProgress}%`;
-            
-            // When complete, hide the overlay with transition
-            if (loadingProgress >= 100) {
-                setTimeout(() => {
-                    const overlay = document.querySelector('.loading-overlay');
-                    overlay.style.opacity = 0;
-                    setTimeout(() => {
-                        overlay.style.display = 'none';
-                    }, 500);
-                }, 500);
+        // Control Panel Functions
+        function toggleControlPanel() {
+            const panel = document.getElementById('control-panel');
+            const isCollapsed = panel.classList.toggle('collapsed');
+            localStorage.setItem('navicast_panel_collapsed', isCollapsed);
+        }
+        
+        function initPanelState() {
+            const isCollapsed = localStorage.getItem('navicast_panel_collapsed') === 'true';
+            if (isCollapsed) {
+                document.getElementById('control-panel').classList.add('collapsed');
             }
         }
 
-        // Start loading animation
-        let progressInterval = setInterval(() => {
-            updateLoadingProgress(loadingProgress + 5);
-            if (loadingProgress >= 90) clearInterval(progressInterval);
-        }, 100);
-
-        // Time display updates
+        // UI Update Functions
         function updateTimeDisplays() {
-            // Current time
             const now = new Date();
             document.getElementById('current-time').textContent = now.toLocaleTimeString();
             
-            // Last update time
             if (lastUpdateTimestamp) {
                 const timeAgo = Math.round((now - lastUpdateTimestamp) / 1000);
                 let timeDisplay;
@@ -750,66 +794,295 @@
             }
         }
 
-        // Countdown timer with both footer and control panel updates
         function updateCountdown() {
-            countdown--;
-            if (countdown < 0) {
-                countdown = 10;
-            }
+            countdown = countdown > 0 ? countdown - 1 : 10;
             document.getElementById('refresh-countdown').textContent = countdown + 's';
             document.getElementById('refresh-countdown-footer').textContent = countdown;
         }
-
-        // Improve vessel marker creation
-        function createVesselMarker(position, isPrediction = false) {
-            const className = isPrediction ? 'prediction-marker' : 'vessel-marker';
-            const fillColor = isPrediction ? getComputedStyle(document.documentElement).getPropertyValue('--prediction-color').trim() : 
-                                           getComputedStyle(document.documentElement).getPropertyValue('--vessel-color').trim();
+        
+        function updateLoadingProgress(progress) {
+            progress = Math.min(progress, 100);
+            document.getElementById('loader-progress-bar').style.width = `${progress}%`;
             
-            // Get border color based on theme
+            if (progress >= 100) {
+                setTimeout(() => {
+                    const overlay = document.querySelector('.loading-overlay');
+                    overlay.style.opacity = 0;
+                    setTimeout(() => overlay.style.display = 'none', 500);
+                }, 500);
+            }
+        }
+
+        // Start loading animation with automatic progress
+        (function startLoadingAnimation() {
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 5;
+                updateLoadingProgress(progress);
+                if (progress >= 90) clearInterval(interval);
+            }, 100);
+        })();
+
+        function updatePredictionStatus(hasActivePredictions) {
+            const statusIndicator = document.getElementById('prediction-status');
+            const statusText = document.getElementById('prediction-status-text');
+            
+            if (hasActivePredictions) {
+                statusIndicator.className = 'status-indicator status-active';
+                statusText.textContent = 'Active';
+            } else {
+                statusIndicator.className = 'status-indicator status-inactive';
+                statusText.textContent = 'No predictions';
+                
+                if (vessels.size > 0 && !document.getElementById('prediction-notice')) {
+                    const notice = document.createElement('div');
+                    notice.id = 'prediction-notice';
+                    notice.style.fontSize = '0.85rem';
+                    notice.style.opacity = '0.7';
+                    notice.style.marginTop = '5px';
+                    notice.textContent = 'Using dead reckoning for vessel paths';
+                    
+                    statusText.parentElement.parentElement.appendChild(notice);
+                }
+            }
+        }
+
+        // Vessel Marker Functions
+        function createVesselMarker(position, isPrediction = false, course = 0) {
+            const className = isPrediction ? 'prediction-marker' : 'vessel-marker';
+            const fillColor = getComputedStyle(document.documentElement)
+                .getPropertyValue(isPrediction ? '--prediction-color' : '--vessel-color').trim();
+            
             const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
             const borderColor = isDarkMode ? 
                 getComputedStyle(document.documentElement).getPropertyValue('--marker-border').trim() : 
                 '#FFFFFF';
             
-            return L.circleMarker(position, {
+            const marker = L.circleMarker(position, {
                 radius: isPrediction ? 5 : 7,
-                fillColor: fillColor,
+                fillColor,
                 color: borderColor,
                 weight: 2,
                 fillOpacity: 0.9,
-                className: className
+                className
             });
+            
+            if (!isPrediction && course !== undefined) {
+                marker.course = course;
+                marker.on('add', () => setTimeout(() => addDirectionIndicator(marker), 100));
+                marker.updateDirection = function(newCourse) {
+                    this.course = newCourse;
+                    updateDirectionIndicator(this);
+                };
+            }
+            
+            return marker;
+        }
+        
+        function addDirectionIndicator(marker) {
+            if (!marker._container) return;
+            
+            const svgElement = marker._container.querySelector('path');
+            if (!svgElement) return;
+            
+            const directionElement = document.createElement('div');
+            directionElement.className = 'vessel-direction';
+            directionElement.style.transform = `rotate(${marker.course}deg)`;
+            
+            marker._container.appendChild(directionElement);
+            marker.directionElement = directionElement;
+        }
+        
+        function updateDirectionIndicator(marker) {
+            if (!marker.directionElement) {
+                addDirectionIndicator(marker);
+                return;
+            }
+            
+            marker.directionElement.style.transform = `rotate(${marker.course}deg)`;
         }
 
-        // Calculate prediction position based on course and speed
+        function updateVesselDirection(vessel, course) {
+            if (!vessel?.marker || isNaN(course)) return;
+            
+            course = ((course % 360) + 360) % 360; // Normalize course to 0-360 degrees
+            
+            if (vessel.marker.updateDirection) {
+                vessel.marker.updateDirection(course);
+            }
+        }
+
+        // Navigation Calculations
         function calculatePredictionPosition(lat, lon, cog, sog, hoursAhead = 0.5) {
             if (!cog || !sog || sog <= 0.5) return null;
             
+            // Validate inputs
+            [lat, lon, cog, sog] = [lat, lon, cog, sog].map(parseFloat);
+            
+            if ([lat, lon, cog, sog].some(isNaN)) {
+                console.warn("Invalid parameters for prediction calculation");
+                return null;
+            }
+            
+            // Normalize course to 0-360 degrees
+            cog = ((cog % 360) + 360) % 360;
+            
+            // Convert to radians
             const latRad = lat * Math.PI / 180;
             const lonRad = lon * Math.PI / 180;
             const cogRad = cog * Math.PI / 180;
             
+            // Calculate distance in nautical miles
             const distNM = sog * hoursAhead;
+            if (distNM <= 0 || distNM > 100) return null;  // Sanity check
+            
+            // Earth radius in nautical miles
             const earthRadiusNM = 3440.065;
             const angDist = distNM / earthRadiusNM;
             
+            // Calculate new position using great-circle navigation formula
             const newLatRad = Math.asin(
                 Math.sin(latRad) * Math.cos(angDist) +
                 Math.cos(latRad) * Math.sin(angDist) * Math.cos(cogRad)
             );
             
-            const newLonRad = lonRad + Math.atan2(
+            let newLonRad = lonRad + Math.atan2(
                 Math.sin(cogRad) * Math.sin(angDist) * Math.cos(latRad),
                 Math.cos(angDist) - Math.sin(latRad) * Math.sin(newLatRad)
             );
             
-            return [newLatRad * 180 / Math.PI, newLonRad * 180 / Math.PI];
+            // Normalize longitude to -180 to 180
+            newLonRad = ((newLonRad + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+            
+            // Convert back to degrees with higher precision
+            return [
+                parseFloat((newLatRad * 180 / Math.PI).toFixed(6)),
+                parseFloat((newLonRad * 180 / Math.PI).toFixed(6))
+            ];
+        }
+        
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            // Earth radius in nautical miles
+            const R = 3440.065;
+            
+            // Convert degrees to radians
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const lat1Rad = lat1 * Math.PI / 180;
+            const lat2Rad = lat2 * Math.PI / 180;
+            
+            // Haversine formula calculation
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.sin(dLon/2) * Math.sin(dLon/2) * 
+                      Math.cos(lat1Rad) * Math.cos(lat2Rad);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            
+            return R * c; // Distance in nautical miles
+        }
+
+        function isValidPrediction(currentPos, predictedPos) {
+            if (!currentPos || !predictedPos || !Array.isArray(currentPos) || !Array.isArray(predictedPos) || 
+                currentPos.length !== 2 || predictedPos.length !== 2) {
+                return false;
+            }
+            
+            const [currentLat, currentLon] = currentPos;
+            const [predLat, predLon] = predictedPos;
+            
+            // Check if coordinates are valid numbers
+            if ([currentLat, currentLon, predLat, predLon].some(isNaN)) return false;
+            
+            // Check if coordinates are within valid ranges
+            if (currentLat < -90 || currentLat > 90 || predLat < -90 || predLat > 90 ||
+                currentLon < -180 || currentLon > 180 || predLon < -180 || predLon > 180) {
+                return false;
+            }
+            
+            // Calculate distance using Haversine formula
+            const distanceNM = calculateDistance(currentLat, currentLon, predLat, predLon);
+            const maxDistanceNM = 15; // Max 15 nautical miles for 30-minute prediction
+            
+            if (distanceNM > maxDistanceNM) {
+                console.warn(`Prediction distance too large: ${distanceNM.toFixed(2)} nautical miles`);
+                return false;
+            }
+            
+            // Baltic Sea specific bounds check
+            if (predLat < 53 || predLat > 66 || predLon < 9 || predLon > 30) {
+                console.warn(`Prediction outside Baltic Sea region: lat=${predLat.toFixed(4)}, lon=${predLon.toFixed(4)}`);
+                return false;
+            }
+            
+            return true;
+        }
+
+        function validateVesselMovement(oldPos, newPos, timeElapsedSeconds) {
+            if (!oldPos || !newPos || !Array.isArray(oldPos) || !Array.isArray(newPos) || 
+                oldPos.length !== 2 || newPos.length !== 2 || !timeElapsedSeconds) {
+                return true; // Default to accepting the movement if we can't validate
+            }
+            
+            // Calculate distance moved in nautical miles
+            const distanceNM = calculateDistance(oldPos[0], oldPos[1], newPos[0], newPos[1]);
+            const timeElapsedHours = timeElapsedSeconds / 3600;
+            const impliedSpeed = distanceNM / timeElapsedHours;
+            
+            // Validate speed is reasonable (below 50 knots)
+            if (impliedSpeed > 50) {
+                console.warn(`Unrealistic vessel movement: ${impliedSpeed.toFixed(1)} knots (${distanceNM.toFixed(2)} nm in ${timeElapsedHours.toFixed(2)} hours)`);
+                return false;
+            }
+            
+            return true;
+        }
+
+        // Vessel Display Functions
+        function updatePredictionVisuals(vessel, currentPos, predictedPos) {
+            const predictionColor = getComputedStyle(document.documentElement)
+                .getPropertyValue('--prediction-color').trim();
+            
+            // Remove existing prediction elements
+            if (vessel.predictionLine) {
+                map.removeLayer(vessel.predictionLine);
+                vessel.predictionLine = null;
+            }
+            
+            if (vessel.predictionMarker) {
+                map.removeLayer(vessel.predictionMarker);
+                vessel.predictionMarker = null;
+            }
+            
+            // Create new prediction elements if valid
+            if (predictedPos && showPredictionLines && isValidPrediction(currentPos, predictedPos)) {
+                vessel.predictionLine = L.polyline([currentPos, predictedPos], { 
+                    color: predictionColor,
+                    dashArray: '5,5',
+                    weight: 2,
+                    opacity: 0.7
+                }).addTo(map);
+                
+                vessel.predictionMarker = createVesselMarker(predictedPos, true);
+                vessel.predictionMarker.addTo(map);
+                vessel.predictionMarker.bindTooltip('30 min ahead', { 
+                    direction: 'top',
+                    permanent: false
+                });
+                
+                // Add hover effects
+                vessel.marker.on('mouseover', () => {
+                    vessel.predictionLine?.setStyle({ opacity: 1, weight: 3 });
+                    vessel.predictionMarker?.setStyle({ radius: 8 });
+                });
+                
+                vessel.marker.on('mouseout', () => {
+                    vessel.predictionLine?.setStyle({ opacity: 0.7, weight: 2 });
+                    vessel.predictionMarker?.setStyle({ radius: 6 });
+                });
+            }
         }
 
         function formatDateTime(dateString) {
-            const date = new Date(dateString);
-            return date.toLocaleString('en-US', {
+            return new Date(dateString).toLocaleString('en-US', {
                 month: 'short',
                 day: 'numeric',
                 hour: '2-digit',
@@ -839,22 +1112,28 @@
                 }
             }
             
-            // Format country display with flag emoji if available
-            const countryStr = vesselData.country ? vesselData.country : 'Unknown';
+            // Format data values
+            const countryStr = vesselData.country || 'Unknown';
+            const currentLat = typeof vesselData.current_latitude === 'number' ? 
+                vesselData.current_latitude.toFixed(6) : 'N/A';
+            const currentLon = typeof vesselData.current_longitude === 'number' ? 
+                vesselData.current_longitude.toFixed(6) : 'N/A';
             
-            // Format data values with defaults and units
             const speedStr = vesselData.sog !== null && vesselData.sog !== undefined 
-                ? `${vesselData.sog.toFixed(1)} knots` 
+                ? `${parseFloat(vesselData.sog).toFixed(1)} knots` 
                 : '0.0 knots';
                 
             const courseStr = vesselData.cog !== null && vesselData.cog !== undefined 
-                ? `${vesselData.cog.toFixed(1)}°` 
+                ? `${parseFloat(vesselData.cog).toFixed(1)}°` 
                 : '0.0°';
                 
-            // Format heading if available
             const headingStr = vesselData.heading !== null && vesselData.heading !== undefined 
-                ? `${vesselData.heading.toFixed(1)}°` 
+                ? `${parseFloat(vesselData.heading).toFixed(1)}°` 
                 : 'N/A';
+                
+            // Only include vessel type if it's defined and not "Unknown"
+            const vesselType = vesselData.vessel_type && vesselData.vessel_type !== 'Unknown' 
+                ? vesselData.vessel_type : null;
                 
             // Format position accuracy with icon
             const posAccStr = vesselData.pos_acc !== null && vesselData.pos_acc !== undefined 
@@ -873,9 +1152,19 @@
                 
                 <div class="popup-section">
                     <div class="data-row">
+                        <span class="data-label">Position:</span>
+                        <span class="data-value">${currentLat}, ${currentLon}</span>
+                    </div>
+                    <div class="data-row">
                         <span class="data-label">Flag:</span>
                         <span class="data-value">${countryStr}</span>
                     </div>
+                    ${vesselType ? `
+                    <div class="data-row">
+                        <span class="data-label">Type:</span>
+                        <span class="data-value">${vesselType}</span>
+                    </div>
+                    ` : ''}
                     <div class="data-row">
                         <span class="data-label">Speed:</span>
                         <span class="data-value">${speedStr}</span>
@@ -900,10 +1189,10 @@
                 
                 ${vesselData.predicted_latitude && vesselData.predicted_longitude ? `
                     <div class="popup-prediction">
-                        <div><i class="fas fa-route"></i> <strong>Prediction</strong></div>
+                        <div><i class="fas fa-route"></i> <strong>Prediction (30 min)</strong></div>
                         <div class="data-row">
                             <span class="data-label">Predicted Position:</span>
-                            <span class="data-value">${vesselData.predicted_latitude.toFixed(4)}, ${vesselData.predicted_longitude.toFixed(4)}</span>
+                            <span class="data-value">${parseFloat(vesselData.predicted_latitude).toFixed(6)}, ${parseFloat(vesselData.predicted_longitude).toFixed(6)}</span>
                         </div>
                         <div class="prediction-info">
                             <div>Prediction for: ${predictionTimeStr}</div>
@@ -915,117 +1204,55 @@
             return container;
         }
 
-        function isValidPrediction(currentPos, predictedPos) {
-            if (!predictedPos || predictedPos.length !== 2) return false;
-            
-            const [currentLat, currentLon] = currentPos;
-            const [predLat, predLon] = predictedPos;
-            
-            // Limit prediction distance to reasonable values
-            const maxDistanceDegrees = 0.5; // About 30 nautical miles
-            if (Math.abs(predLat - currentLat) > maxDistanceDegrees || 
-                Math.abs(predLon - currentLon) > maxDistanceDegrees) {
-                console.log(`Prediction delta too large for vessel: ${Math.abs(predLat - currentLat)}, ${Math.abs(predLon - currentLon)}`);
-                return false;
-            }
-            
-            return true;
-        }
-
-        function updatePredictionStatus(hasPreds) {
-            const statusIndicator = document.getElementById('prediction-status');
-            const statusText = document.getElementById('prediction-status-text');
-            
-            if (hasPreds) {
-                statusIndicator.className = 'status-indicator status-active';
-                statusText.textContent = 'Active';
-            } else {
-                statusIndicator.className = 'status-indicator status-inactive';
-                statusText.textContent = 'No predictions';
-            }
-        }
-
-        // Create or update prediction visuals for a vessel
-        function updatePredictionVisuals(vessel, currentPos, predictedPos) {
-            const predictionColor = getComputedStyle(document.documentElement)
-                .getPropertyValue('--prediction-color').trim();
-            
-            // Remove existing prediction elements if they exist
-            if (vessel.predictionLine) {
-                map.removeLayer(vessel.predictionLine);
-                vessel.predictionLine = null;
-            }
-            
-            if (vessel.predictionMarker) {
-                map.removeLayer(vessel.predictionMarker);
-                vessel.predictionMarker = null;
-            }
-            
-            // Create new prediction elements if we have valid prediction data
-            if (predictedPos && showPredictionLines) {
-                vessel.predictionLine = L.polyline([currentPos, predictedPos], { 
-                    color: predictionColor,
-                    dashArray: '5,5',
-                    weight: 2,
-                    opacity: 0.7
-                }).addTo(map);
-                
-                vessel.predictionMarker = createVesselMarker(predictedPos, true);
-                vessel.predictionMarker.addTo(map);
-                vessel.predictionMarker.bindTooltip('30 min ahead', { 
-                    direction: 'top',
-                    permanent: false
-                });
-                
-                // Add hover effects to the prediction elements
-                vessel.marker.on('mouseover', () => {
-                    if (vessel.predictionLine) {
-                        vessel.predictionLine.setStyle({ opacity: 1, weight: 3 });
-                    }
-                    if (vessel.predictionMarker) {
-                        vessel.predictionMarker.setStyle({ radius: 8 });
-                    }
-                });
-                
-                vessel.marker.on('mouseout', () => {
-                    if (vessel.predictionLine) {
-                        vessel.predictionLine.setStyle({ opacity: 0.7, weight: 2 });
-                    }
-                    if (vessel.predictionMarker) {
-                        vessel.predictionMarker.setStyle({ radius: 6 });
-                    }
-                });
-            }
-        }
-
+        // Main data fetching and processing
         async function updateVesselDisplay() {
             try {
                 const response = await fetch('/vessels');
-                if (!response.ok) throw new Error(`Failed to fetch vessel data: ${response.status} ${response.statusText}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch vessel data: ${response.status} ${response.statusText}`);
+                }
                 
                 const vesselData = await response.json();
-                lastUpdateTimestamp = new Date();
+                const currentTime = new Date();
+                const timeSinceLastUpdate = lastUpdateTimestamp ? 
+                    (currentTime - lastUpdateTimestamp) / 1000 : 0;
+                
+                lastUpdateTimestamp = currentTime;
                 countdown = 10;
                 
                 let predictionCount = 0;
-                
-                // Update loading progress when data is received
                 updateLoadingProgress(100);
                 
                 // Process vessel data
                 vesselData.forEach(data => {
                     if (!data.current_latitude || !data.current_longitude) {
-                        console.log(`Skipping vessel ${data.vessel_id}: Missing current position`);
+                        console.log(`Skipping vessel ${data.vessel_id}: Missing position`);
                         return;
                     }
 
                     const vesselId = data.vessel_id;
-                    const currentPos = [data.current_latitude, data.current_longitude];
-                    let predictedPos = null;
+                    const currentPos = [
+                        parseFloat(data.current_latitude), 
+                        parseFloat(data.current_longitude)
+                    ];
                     
-                    // Determine prediction position - use API data if available, otherwise calculate
+                    if (currentPos.some(isNaN)) {
+                        console.log(`Skipping vessel ${vesselId}: Invalid coordinates`);
+                        return;
+                    }
+                    
+                    // Get course angle - prefer heading if available, otherwise use COG
+                    const courseAngle = 
+                        data.heading !== null && data.heading !== undefined ? parseFloat(data.heading) : 
+                        data.cog !== null && data.cog !== undefined ? parseFloat(data.cog) : 0;
+                    
+                    // Determine prediction position
+                    let predictedPos = null;
                     if (data.predicted_latitude !== null && data.predicted_longitude !== null) {
-                        predictedPos = [data.predicted_latitude, data.predicted_longitude];
+                        predictedPos = [
+                            parseFloat(data.predicted_latitude), 
+                            parseFloat(data.predicted_longitude)
+                        ];
                     } else if (data.cog !== null && data.sog !== null && data.sog > 0.5) {
                         predictedPos = calculatePredictionPosition(
                             data.current_latitude, 
@@ -1043,60 +1270,21 @@
                         predictedPos = null;
                     }
 
-                    // Create or update vessel marker and prediction
+                    // Create or update vessel
                     if (!vessels.has(vesselId)) {
-                        // Create new vessel marker and data
-                        const marker = createVesselMarker(currentPos);
-                        marker.bindPopup(() => createPopupContent(data));
-                        marker.addTo(map);
-                        
-                        // Add hover effect to the marker
-                        marker.on('mouseover', function() {
-                            this.setRadius(9);
-                            this.setStyle({ weight: 3 });
-                        });
-                        
-                        marker.on('mouseout', function() {
-                            this.setRadius(7);
-                            this.setStyle({ weight: 2 });
-                        });
-
-                        vessels.set(vesselId, {
-                            vesselId: vesselId,
-                            marker,
-                            predictionLine: null,
-                            predictionMarker: null,
-                            data: data
-                        });
-                        
-                        const vessel = vessels.get(vesselId);
-                        updatePredictionVisuals(vessel, currentPos, predictedPos);
+                        createNewVessel(vesselId, data, currentPos, courseAngle, predictedPos);
                     } else {
-                        // Update existing vessel
-                        const vessel = vessels.get(vesselId);
-                        
-                        // Store the updated data
-                        vessel.data = data;
-                        
-                        // Update position and popup content
-                        vessel.marker.setLatLng(currentPos);
-                        if (vessel.marker.getPopup()) {
-                            vessel.marker.setPopupContent(createPopupContent(data));
-                        }
-                        
-                        // Update prediction visuals
-                        updatePredictionVisuals(vessel, currentPos, predictedPos);
+                        updateExistingVessel(vessels.get(vesselId), data, currentPos, courseAngle, 
+                            predictedPos, timeSinceLastUpdate);
                     }
                 });
 
                 // Update stats display
                 document.getElementById('vessel-count').textContent = vessels.size;
                 document.getElementById('prediction-count').textContent = predictionCount;
-                
-                hasPredictions = predictionCount > 0;
-                updatePredictionStatus(hasPredictions);
+                updatePredictionStatus(predictionCount > 0);
 
-                // Remove vessels that no longer exist in the data
+                // Remove vessels that no longer exist
                 const currentIds = new Set(vesselData.map(d => d.vessel_id));
                 vessels.forEach((v, id) => {
                     if (!currentIds.has(id)) {
@@ -1109,8 +1297,74 @@
 
             } catch (error) {
                 console.error('Data update error:', error);
-                // Show error in status bar or notification
                 updatePredictionStatus(false);
+                
+                // Visual error feedback
+                const footer = document.querySelector('.time-footer');
+                footer.style.backgroundColor = 'rgba(244, 67, 54, 0.8)';
+                setTimeout(() => { footer.style.backgroundColor = ''; }, 3000);
+                
+                // Retry on network errors
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    setTimeout(updateVesselDisplay, 5000);
+                }
+            }
+        }
+
+        function createNewVessel(vesselId, data, currentPos, courseAngle, predictedPos) {
+            const marker = createVesselMarker(currentPos, false, courseAngle);
+            marker.bindPopup(() => createPopupContent(data));
+            marker.addTo(map);
+            
+            // Add hover effect
+            marker.on('mouseover', function() {
+                this.setRadius(9);
+                this.setStyle({ weight: 3 });
+            });
+            
+            marker.on('mouseout', function() {
+                this.setRadius(7);
+                this.setStyle({ weight: 2 });
+            });
+
+            const vessel = {
+                vesselId,
+                marker,
+                predictionLine: null,
+                predictionMarker: null,
+                data,
+                lastPosition: currentPos,
+                lastUpdateTime: new Date()
+            };
+            
+            vessels.set(vesselId, vessel);
+            updatePredictionVisuals(vessel, currentPos, predictedPos);
+        }
+
+        function updateExistingVessel(vessel, data, currentPos, courseAngle, predictedPos, timeElapsed) {
+            const oldPos = vessel.lastPosition;
+            const lastUpdateTime = vessel.lastUpdateTime;
+            
+            // Validate movement is realistic
+            const timeElapsedSeconds = (new Date() - lastUpdateTime) / 1000;
+            const isValidMovement = validateVesselMovement(oldPos, currentPos, timeElapsedSeconds);
+            
+            if (isValidMovement) {
+                // Update vessel data and position
+                vessel.data = data;
+                vessel.lastPosition = currentPos;
+                vessel.lastUpdateTime = new Date();
+                
+                vessel.marker.setLatLng(currentPos);
+                if (vessel.marker.getPopup()) {
+                    vessel.marker.setPopupContent(createPopupContent(data));
+                }
+                
+                updateVesselDirection(vessel, courseAngle);
+                updatePredictionVisuals(vessel, currentPos, predictedPos);
+            } else {
+                console.warn(`Invalid movement for vessel ${vessel.vesselId}. Using previous position.`);
+                vessel.data = data;
             }
         }
 
@@ -1118,10 +1372,6 @@
         setInterval(updateCountdown, 1000);
         setInterval(updateTimeDisplays, 1000);
         setInterval(updateVesselDisplay, updateInterval);
-
-        // Initial updates
-        updateTimeDisplays();
-        updateVesselDisplay();
     </script>
 </body>
 </html>

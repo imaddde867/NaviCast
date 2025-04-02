@@ -12,6 +12,9 @@ import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional, Any
 
+# Create logs directory if it doesn't exist
+os.makedirs('logs', exist_ok=True)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -46,12 +49,17 @@ def load_model():
     """Load the vessel prediction model"""
     try:
         logger.info("Loading prediction model...")
-        model = joblib.load(MODEL_PATH)
-        logger.info("Prediction model loaded successfully")
-        return model
+        if os.path.exists(MODEL_PATH):
+            model = joblib.load(MODEL_PATH)
+            logger.info("Prediction model loaded successfully")
+            return model
+        else:
+            logger.warning(f"Model file {MODEL_PATH} not found, will use fallback dead reckoning")
+            return None
     except Exception as e:
         logger.error(f"Failed to load prediction model: {e}")
-        raise
+        logger.warning("Will use fallback dead reckoning method for predictions")
+        return None
 
 # Calculate vessel position prediction
 def calculate_position_prediction(lat, lon, sog, cog, time_diff):
@@ -147,8 +155,13 @@ def make_predictions():
                 
                 # Try to use the model for prediction
                 try:
-                    delta_lat, delta_lon = model.predict(input_data)[0]
-                    logger.debug(f"Model prediction for vessel {vessel_id}: delta_lat={delta_lat:.6f}, delta_lon={delta_lon:.6f}")
+                    if model is not None:
+                        delta_lat, delta_lon = model.predict(input_data)[0]
+                        logger.debug(f"Model prediction for vessel {vessel_id}: delta_lat={delta_lat:.6f}, delta_lon={delta_lon:.6f}")
+                    else:
+                        # Use dead reckoning if model is not available
+                        delta_lat, delta_lon = calculate_position_prediction(lat, lon, sog_val, cog_val, PREDICTION_INTERVAL)
+                        logger.debug(f"Dead reckoning for vessel {vessel_id}: delta_lat={delta_lat:.6f}, delta_lon={delta_lon:.6f}")
                 except Exception as e:
                     logger.warning(f"Model prediction failed for vessel {vessel_id}: {e}")
                     # Fallback to dead reckoning
@@ -177,7 +190,7 @@ def make_predictions():
                     INSERT INTO predictions 
                         (vessel_id, predicted_latitude, predicted_longitude, prediction_for_timestamp, prediction_made_at)
                     VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT ON CONSTRAINT predictions_pkey DO UPDATE SET
+                    ON CONFLICT (vessel_id) DO UPDATE SET
                         predicted_latitude = EXCLUDED.predicted_latitude,
                         predicted_longitude = EXCLUDED.predicted_longitude,
                         prediction_for_timestamp = EXCLUDED.prediction_for_timestamp,
