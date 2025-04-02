@@ -13,6 +13,9 @@ import os
 from fastapi.responses import JSONResponse
 import uvicorn
 
+# Create logs directory if it doesn't exist
+os.makedirs('logs', exist_ok=True)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,

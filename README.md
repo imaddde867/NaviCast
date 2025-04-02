@@ -19,6 +19,8 @@ NAVICAST consists of four main components:
 
 NAVICAST uses an advanced machine learning model to predict vessel positions 30 minutes into the future (upgraded from the previous 5-minute prediction window). The model was trained on 363,899 vessel position records collected from the Baltic Sea region, allowing it to learn complex vessel movement patterns under various conditions. This provides maritime traffic controllers, port authorities, and vessel operators with enhanced situational awareness and planning capabilities. For a detailed analysis of the model architecture and training process, see the [technical documentation](docs/ML_Model.pdf).
 
+> **Note**: The application can run without the ML model file by using a fallback dead reckoning method for predictions.
+
 ### Model Performance
 
 The model was evaluated on its ability to predict vessel positions 30 minutes ahead:
@@ -80,7 +82,7 @@ The platform provides detailed information for each tracked vessel, including sp
 - **Schema**:
   - `raw_ais_data`: Stores raw AIS messages with vessel position and metadata
   - `predictions`: Stores calculated vessel trajectory predictions
-- **Retention Policy**: Raw data is retained for 30 days by default
+- **Retention Policy**: Raw data is retained for 24 hours by default
 - **Backup Strategy**: Daily database backups recommended
 
 ### Data Processing
@@ -147,7 +149,7 @@ cd NaviCast
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Create logs directory
+# Create logs directory (if it doesn't already exist)
 mkdir -p logs
 ```
 
