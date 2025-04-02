@@ -47,7 +47,7 @@ The model was evaluated on its ability to predict vessel positions 30 minutes ah
 The platform provides detailed information for each tracked vessel, including speed, course, heading, and prediction data.
 
 <p align="center">
-  <img src="static/vessel_details.png" alt="Vessel Details" width="400">
+  <img src="static/vessel_details.png" alt="Vessel Details" width="300">
 </p>
 
 ## System Architecture
