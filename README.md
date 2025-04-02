@@ -13,7 +13,14 @@ NAVICAST consists of four main components:
 1. **AIS Data Collection**: MQTT client that connects to the Digitraffic AIS feed and stores received vessel messages in a PostgreSQL database.
 2. **Vessel Prediction**: ML-based service that predicts vessel trajectories 30 minutes ahead based on current position, heading, and speed.
 3. **API Server**: REST API that provides access to vessel data and predictions with filtering capabilities.
-4. **Web-based Visualization**: Interactive map interface for visualizing vessels and their predicted paths.
+4. **Web-based Visualization**: Interactive map interface for visualizing vessels and their predicted paths. Features include:
+    - Real-time vessel markers with direction indicators.
+    - Prediction lines and markers for anticipated paths (AI or calculated).
+    - Dark mode support.
+    - Quick filters (All, Moving, Stationary, Predictable based on AI).
+    - Detailed vessel information popups with status badges (Moving/Stationary) and prediction source.
+    - Visual cues like pulsing markers for moving vessels.
+    - Collapsible control panel.
 
 ## Machine Learning Model
 
@@ -35,6 +42,8 @@ The model was evaluated on its ability to predict vessel positions 30 minutes ah
 **Random Forest** achieved the best performance with a mean distance error of only 154 meters and a median error of just 11 meters for 30-minute predictions.
 
 ### Prediction Visualization
+
+**Note**: The screenshots below may not reflect the most recent UI enhancements.
 
 <p align="center">
   <img src="static/dashboard.png" alt="Vessel Prediction Map">
@@ -212,7 +221,7 @@ Once all services are running:
 The NAVICAST API provides the following endpoints:
 
 ### GET /vessels
-Lists all vessels with their current positions and predictions.
+Lists all vessels with their *latest* known positions and predictions.
 
 Query parameters:
 - `mmsi`: Filter by vessel MMSI
