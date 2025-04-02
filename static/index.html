@@ -3,23 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Marine Traffic Intelligence</title>
+    <title>NAVICAST - Maritime Intelligence Platform</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         :root {
+            /* Light theme colors */
             --primary-blue: #1A365D;
             --secondary-blue: #2A4B7C;
-            --accent-orange: #FFA726;
-            --prediction-color: #FFA726;
+            --accent-blue: #4A6FA5;
+            --accent-orange: #FF9800;
+            --prediction-color: #FF9800;
             --vessel-color: #2A4B7C;
             --text-light: #F5F5F5;
-            --danger: #FF5252;
+            --text-dark: #333333;
+            --background-light: #FFFFFF;
+            --background-dark: #1A1A1A;
+            --panel-bg: rgba(255, 255, 255, 0.95);
+            --panel-border: rgba(0, 0, 0, 0.1);
+            --danger: #F44336;
+            --success: #4CAF50;
+            --warning: #FF9800;
+            --info: #2196F3;
+        }
+
+        [data-theme="dark"] {
+            --primary-blue: #1E3A5F;
+            --secondary-blue: #2C4F81;
+            --accent-blue: #3F5F8F;
+            --vessel-color: #5D8ACA;
+            --text-light: #F5F5F5;
+            --text-dark: #E0E0E0;
+            --background-light: #121212;
+            --background-dark: #000000;
+            --panel-bg: rgba(33, 33, 33, 0.95);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --marker-border: rgba(33, 33, 33, 0.8);
+            --prediction-info-color: rgba(255, 255, 255, 0.6);
         }
 
         body {
             margin: 0;
-            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--background-light);
+            color: var(--text-dark);
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         .header {
@@ -33,6 +61,7 @@
             padding: 0 2rem;
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
             z-index: 1000;
+            box-sizing: border-box;
         }
 
         .logo {
@@ -50,27 +79,63 @@
             margin-left: auto;
             color: var(--text-light);
             font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
         #map {
             height: calc(100vh - 110px);
             margin-top: 60px;
+            z-index: 1;
         }
 
         .control-panel {
             position: absolute;
             top: 80px;
             right: 10px;
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            background: var(--panel-bg);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             z-index: 990;
-            width: 220px;
+            width: 250px;
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-border);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+
+        .control-section {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--panel-border);
+        }
+
+        .control-section:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .control-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            font-size: 0.95rem;
+            color: var(--secondary-blue);
         }
 
         .control-item {
             margin-bottom: 10px;
+        }
+
+        .control-item:last-child {
+            margin-bottom: 0;
         }
 
         .time-footer {
@@ -78,7 +143,7 @@
             bottom: 0;
             width: 100%;
             height: 50px;
-            background: rgba(26, 54, 93, 0.9);
+            background: rgba(26, 54, 93, 0.95);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -87,6 +152,7 @@
             font-size: 0.9rem;
             backdrop-filter: blur(5px);
             z-index: 1000;
+            box-sizing: border-box;
         }
 
         .vessel-marker {
@@ -94,6 +160,12 @@
             border: 2px solid white;
             border-radius: 50%;
             transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+        }
+
+        [data-theme="dark"] .vessel-marker {
+            border-color: var(--marker-border);
+            box-shadow: 0 0 10px rgba(93, 138, 202, 0.6);
         }
 
         .prediction-marker {
@@ -101,6 +173,12 @@
             border: 2px solid white;
             border-radius: 50%;
             transition: all 0.3s ease;
+            box-shadow: 0 0 8px rgba(255, 152, 0, 0.6);
+        }
+
+        [data-theme="dark"] .prediction-marker {
+            border-color: var(--marker-border);
+            box-shadow: 0 0 8px rgba(255, 152, 0, 0.8);
         }
 
         .prediction-line {
@@ -112,19 +190,43 @@
         }
 
         .leaflet-popup-content {
-            min-width: 250px;
-            font-size: 0.9rem;
+            min-width: 280px;
+            font-size: 0.95rem;
+        }
+
+        [data-theme="dark"] .leaflet-popup-content-wrapper {
+            background-color: rgba(33, 33, 33, 0.95);
+            color: var(--text-light);
+        }
+
+        [data-theme="dark"] .leaflet-popup-tip {
+            background-color: rgba(33, 33, 33, 0.95);
         }
 
         .data-row {
             display: flex;
             justify-content: space-between;
-            margin: 0.3rem 0;
+            margin: 0.5rem 0;
+            align-items: center;
         }
 
         .data-label {
-            color: #666;
+            color: var(--text-dark);
             font-weight: 500;
+            opacity: 0.8;
+        }
+
+        [data-theme="dark"] .data-label {
+            color: rgba(255, 255, 255, 0.9);
+            opacity: 1;
+        }
+
+        .data-value {
+            font-weight: 500;
+        }
+
+        [data-theme="dark"] .data-value {
+            color: #FFFFFF;
         }
 
         .loading-overlay {
@@ -133,24 +235,74 @@
             left: 0;
             right: 0;
             bottom: 50px;
-            background: rgba(255,255,255,0.9);
+            background: var(--panel-bg);
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 999;
-            backdrop-filter: blur(2px);
+            backdrop-filter: blur(8px);
+            transition: opacity 0.5s ease;
         }
 
         .loader {
             display: flex;
             flex-direction: column;
             align-items: center;
+            text-align: center;
+            max-width: 300px;
         }
 
         .loader i {
-            font-size: 2rem;
-            color: var(--primary-blue);
-            margin-bottom: 1rem;
+            font-size: 3rem;
+            color: var(--accent-orange);
+            margin-bottom: 1.5rem;
+        }
+
+        .loader-progress {
+            width: 100%;
+            height: 4px;
+            background-color: rgba(0, 0, 0, 0.1);
+            border-radius: 2px;
+            margin-top: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .loader-progress-bar {
+            height: 100%;
+            background-color: var(--accent-orange);
+            width: 0%;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        .btn {
+            padding: 8px 15px;
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background-color: var(--secondary-blue);
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        .btn-block {
+            width: 100%;
+            display: flex;
         }
 
         .switch {
@@ -173,7 +325,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background-color: #ccc;
+            background-color: rgba(0, 0, 0, 0.25);
             transition: .4s;
             border-radius: 34px;
         }
@@ -181,13 +333,14 @@
         .slider:before {
             position: absolute;
             content: "";
-            height: 16px;
-            width: 16px;
-            left: 4px;
-            bottom: 4px;
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
             background-color: white;
             transition: .4s;
             border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         input:checked + .slider {
@@ -211,104 +364,216 @@
         }
 
         .status-active {
-            background-color: var(--accent-orange);
+            background-color: var(--success);
+            box-shadow: 0 0 5px var(--success);
         }
 
         .status-inactive {
             background-color: var(--danger);
+            box-shadow: 0 0 5px var(--danger);
         }
 
         .popup-header {
-            border-bottom: 1px solid #eee;
-            padding-bottom: 8px;
-            margin-bottom: 8px;
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 10px;
+            margin-bottom: 12px;
             font-weight: bold;
+            font-size: 1.05rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        [data-theme="dark"] .popup-header {
+            border-bottom-color: rgba(255, 255, 255, 0.2);
         }
 
         .popup-section {
-            margin-top: 10px;
+            margin-top: 12px;
         }
 
         .popup-prediction {
-            background-color: rgba(255, 167, 38, 0.1);
+            background-color: rgba(255, 152, 0, 0.1);
             border-left: 3px solid var(--accent-orange);
-            padding: 8px;
-            margin-top: 10px;
+            padding: 12px;
+            margin-top: 15px;
+            border-radius: 0 4px 4px 0;
+        }
+
+        [data-theme="dark"] .popup-prediction {
+            background-color: rgba(255, 152, 0, 0.15);
         }
 
         .prediction-info {
-            font-size: 0.8rem;
-            color: #777;
-            margin-top: 5px;
+            font-size: 0.85rem;
+            color: rgba(0, 0, 0, 0.6);
+            margin-top: 8px;
+        }
+
+        [data-theme="dark"] .prediction-info {
+            color: var(--prediction-info-color);
         }
 
         .legend-item {
             display: flex;
             align-items: center;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
         }
 
         .legend-marker {
-            width: 10px;
-            height: 10px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
-            margin-right: 5px;
+            margin-right: 8px;
+            border: 1px solid white;
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+        }
+
+        [data-theme="dark"] .legend-marker {
+            border-color: var(--marker-border);
         }
 
         .legend-line {
             width: 20px;
             height: 2px;
+            margin-right: 8px;
+        }
+
+        /* Dark mode toggle */
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .theme-toggle i {
+            font-size: 1.1rem;
             margin-right: 5px;
+        }
+
+        /* Responsive styles */
+        @media (max-width: 768px) {
+            .header {
+                padding: 0 1rem;
+            }
+            
+            .title {
+                font-size: 1.2rem;
+            }
+            
+            .stats {
+                font-size: 0.8rem;
+                flex-direction: column;
+                align-items: flex-end;
+                gap: 5px;
+            }
+            
+            .control-panel {
+                top: auto;
+                bottom: 60px;
+                right: 10px;
+                max-width: calc(100% - 20px);
+                width: 220px;
+            }
+            
+            .time-footer {
+                padding: 0 1rem;
+                font-size: 0.8rem;
+            }
         }
     </style>
 </head>
 <body>
     <header class="header">
-        <img src="NAVICAST-logo/vector/logo-white.svg" class="logo" alt="NAVICAST Logo">
-        <div class="title"></div>
+        <img src="NAVICAST-logo/logo-white.svg" class="logo" alt="NAVICAST Logo">
+        <div class="title">Maritime Intelligence Platform</div>
         <div class="stats">
-            Tracking: <span id="vessel-count">0</span> vessels | 
-            With predictions: <span id="prediction-count">0</span>
+            <div class="stat-item">
+                <i class="fas fa-ship"></i>
+                <span>Vessels: <span id="vessel-count">0</span></span>
+            </div>
+            <div class="stat-item">
+                <i class="fas fa-route"></i>
+                <span>Predictions: <span id="prediction-count">0</span></span>
+            </div>
         </div>
     </header>
 
     <div id="map"></div>
 
     <div class="control-panel">
-        <div class="control-item">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <label for="toggle-predictions">Show Predictions</label>
-                <label class="switch">
-                    <input type="checkbox" id="toggle-predictions" checked>
-                    <span class="slider"></span>
-                </label>
+        <div class="control-section">
+            <div class="control-title">Display Options</div>
+            <div class="control-item">
+                <div class="data-row">
+                    <label for="toggle-predictions">Show Predictions</label>
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-predictions" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="control-item">
+                <div class="data-row theme-toggle" id="theme-toggle">
+                    <span>
+                        <i class="fas fa-moon"></i>
+                        Dark Mode
+                    </span>
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-theme">
+                        <span class="slider"></span>
+                    </label>
+                </div>
             </div>
         </div>
-        <div class="control-item">
-            <div class="data-row">
-                <span>Prediction Status:</span>
-                <span>
-                    <span class="status-indicator" id="prediction-status"></span>
-                    <span id="prediction-status-text">Checking...</span>
-                </span>
+        
+        <div class="control-section">
+            <div class="control-title">System Status</div>
+            <div class="control-item">
+                <div class="data-row">
+                    <span>Prediction Service:</span>
+                    <span>
+                        <span class="status-indicator" id="prediction-status"></span>
+                        <span id="prediction-status-text">Checking...</span>
+                    </span>
+                </div>
+            </div>
+            <div class="control-item">
+                <div class="data-row">
+                    <span>Data Refresh:</span>
+                    <span id="refresh-countdown">10s</span>
+                </div>
             </div>
         </div>
-        <div class="control-item">
-            <button id="center-map" style="width: 100%; padding: 5px;">Center Map on Baltic</button>
+        
+        <div class="control-section">
+            <div class="control-title">Map Controls</div>
+            <div class="control-item">
+                <button id="center-map" class="btn btn-block">
+                    <i class="fas fa-location-crosshairs"></i>
+                    Center on Finland
+                </button>
+            </div>
         </div>
-        <div class="control-item">
-            <div>Legend:</div>
-            <div class="legend-item">
-                <div class="legend-marker" style="background: var(--vessel-color);"></div>
-                Current Position
-            </div>
-            <div class="legend-item">
-                <div class="legend-marker" style="background: var(--prediction-color);"></div>
-                Predicted Position
-            </div>
-            <div class="legend-item">
-                <div class="legend-line" style="background: var(--prediction-color); opacity: 0.7;"></div>
-                Predicted Path
+        
+        <div class="control-section">
+            <div class="control-title">Legend</div>
+            <div class="control-item">
+                <div class="legend-item">
+                    <div class="legend-marker" style="background: var(--vessel-color);"></div>
+                    Current Position
+                </div>
+                <div class="legend-item">
+                    <div class="legend-marker" style="background: var(--prediction-color);"></div>
+                    Predicted Position
+                </div>
+                <div class="legend-item">
+                    <div class="legend-line" style="background: var(--prediction-color); opacity: 0.7;"></div>
+                    Predicted Path
+                </div>
             </div>
         </div>
     </div>
@@ -319,9 +584,11 @@
             <span id="current-time"></span>
         </div>
         <div>
-            <i class="fas fa-sync"></i> Auto-refresh: <span id="refresh-countdown">10</span>s
+            <i class="fas fa-sync"></i> 
+            Auto-refresh in <span id="refresh-countdown-footer">10</span>s
         </div>
         <div class="last-update">
+            <i class="fas fa-history"></i>
             Last Update: <span id="last-update-time">-</span>
         </div>
     </footer>
@@ -329,98 +596,189 @@
     <div class="loading-overlay">
         <div class="loader">
             <i class="fas fa-ship fa-spin"></i>
-            <div>Loading vessel data...</div>
+            <h2>NAVICAST</h2>
+            <div>Loading vessel tracking data from the Baltic Sea...</div>
+            <div class="loader-progress">
+                <div class="loader-progress-bar" id="loader-progress-bar"></div>
+            </div>
         </div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script>
-        // Initialize Map
+        // Global Variables
+        const vessels = new Map();
+        let lastUpdateTimestamp = null;
+        const updateInterval = 10000; // 10 seconds
+        let countdown = 10;
+        let showPredictionLines = true;
+        let hasPredictions = false;
+        let loadingProgress = 0;
+        
+        // Map initialization with improved settings
         const map = L.map('map', {
             preferCanvas: true,
             zoomSnap: 0.5,
             inertia: true,
-            renderer: L.canvas({ padding: 0.5 })
+            renderer: L.canvas({ padding: 0.5 }),
+            zoomControl: false
         }).setView([59.5, 20], 6);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-            maxZoom: 18,
+        // Add zoom control to bottom left
+        L.control.zoom({
+            position: 'bottomleft'
         }).addTo(map);
 
-        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        // Choose map tile layers based on theme
+        const lightTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/attribution">CARTO</a>',
+            maxZoom: 18
+        });
+        
+        const darkTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/attribution">CARTO</a>',
+            maxZoom: 18
+        });
+        
+        // Start with light theme
+        lightTileLayer.addTo(map);
 
-        // State Management
-        const vessels = new Map();
-        const updateInterval = 10000;
-        let lastUpdateTimestamp = null;
-        let showPredictionLines = true;
-        let countdown = 10;
-        let hasPredictions = false;
-
-        // Event listeners for toggle controls
-        document.getElementById('toggle-predictions').addEventListener('change', (e) => {
-            showPredictionLines = e.target.checked;
-            vessels.forEach(vessel => {
-                togglePredictionVisibility(vessel, showPredictionLines);
+        // Center map on Finnish waters with animation
+        document.getElementById('center-map').addEventListener('click', () => {
+            map.flyTo([60.5, 22.5], 7, {
+                duration: 1.5
             });
         });
 
-        document.getElementById('center-map').addEventListener('click', () => {
-            map.setView([59.5, 20], 6);
+        // Toggle predictions
+        document.getElementById('toggle-predictions').addEventListener('change', function(e) {
+            showPredictionLines = this.checked;
+            
+            // Update all vessels to show/hide predictions
+            vessels.forEach(vessel => {
+                if (vessel.predictionLine) {
+                    if (showPredictionLines) {
+                        map.addLayer(vessel.predictionLine);
+                    } else {
+                        map.removeLayer(vessel.predictionLine);
+                    }
+                }
+                
+                if (vessel.predictionMarker) {
+                    if (showPredictionLines) {
+                        map.addLayer(vessel.predictionMarker);
+                    } else {
+                        map.removeLayer(vessel.predictionMarker);
+                    }
+                }
+            });
         });
 
-        // Helper function to toggle prediction visibility
-        function togglePredictionVisibility(vessel, show) {
-            if (vessel.predictionLine) {
-                if (show) {
-                    vessel.predictionLine.addTo(map);
-                } else {
-                    map.removeLayer(vessel.predictionLine);
-                }
-            }
-            if (vessel.predictionMarker) {
-                if (show) {
-                    vessel.predictionMarker.addTo(map);
-                } else {
-                    map.removeLayer(vessel.predictionMarker);
-                }
-            }
-        }
-
-        // Time Display Functions
-        function updateTimeDisplays() {
-            const now = new Date();
-            document.getElementById('current-time').textContent = 
-                now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        // Toggle dark/light theme
+        document.getElementById('toggle-theme').addEventListener('change', function(e) {
+            const isDarkMode = this.checked;
             
-            if (lastUpdateTimestamp) {
-                document.getElementById('last-update-time').textContent = 
-                    lastUpdateTimestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            if (isDarkMode) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                map.removeLayer(lightTileLayer);
+                darkTileLayer.addTo(map);
+            } else {
+                document.documentElement.setAttribute('data-theme', 'light');
+                map.removeLayer(darkTileLayer);
+                lightTileLayer.addTo(map);
+            }
+            
+            // Update marker colors for existing vessels
+            const borderColor = isDarkMode ? 
+                getComputedStyle(document.documentElement).getPropertyValue('--marker-border').trim() : 
+                '#FFFFFF';
+                
+            vessels.forEach(vessel => {
+                if (vessel.marker) {
+                    vessel.marker.setStyle({ color: borderColor });
+                }
+                if (vessel.predictionMarker) {
+                    vessel.predictionMarker.setStyle({ color: borderColor });
+                }
+            });
+        });
+
+        // Loading animation
+        function updateLoadingProgress(progress) {
+            loadingProgress = Math.min(progress, 100);
+            const progressBar = document.getElementById('loader-progress-bar');
+            progressBar.style.width = `${loadingProgress}%`;
+            
+            // When complete, hide the overlay with transition
+            if (loadingProgress >= 100) {
+                setTimeout(() => {
+                    const overlay = document.querySelector('.loading-overlay');
+                    overlay.style.opacity = 0;
+                    setTimeout(() => {
+                        overlay.style.display = 'none';
+                    }, 500);
+                }, 500);
             }
         }
 
-        // Countdown Timer
+        // Start loading animation
+        let progressInterval = setInterval(() => {
+            updateLoadingProgress(loadingProgress + 5);
+            if (loadingProgress >= 90) clearInterval(progressInterval);
+        }, 100);
+
+        // Time display updates
+        function updateTimeDisplays() {
+            // Current time
+            const now = new Date();
+            document.getElementById('current-time').textContent = now.toLocaleTimeString();
+            
+            // Last update time
+            if (lastUpdateTimestamp) {
+                const timeAgo = Math.round((now - lastUpdateTimestamp) / 1000);
+                let timeDisplay;
+                
+                if (timeAgo < 60) {
+                    timeDisplay = `${timeAgo} sec ago`;
+                } else if (timeAgo < 3600) {
+                    timeDisplay = `${Math.floor(timeAgo / 60)} min ago`;
+                } else {
+                    timeDisplay = `${Math.floor(timeAgo / 3600)} hr ${Math.floor((timeAgo % 3600) / 60)} min ago`;
+                }
+                
+                document.getElementById('last-update-time').textContent = timeDisplay;
+            }
+        }
+
+        // Countdown timer with both footer and control panel updates
         function updateCountdown() {
             countdown--;
             if (countdown < 0) {
                 countdown = 10;
             }
-            document.getElementById('refresh-countdown').textContent = countdown;
+            document.getElementById('refresh-countdown').textContent = countdown + 's';
+            document.getElementById('refresh-countdown-footer').textContent = countdown;
         }
 
-        // Vessel Visualization Functions
+        // Improve vessel marker creation
         function createVesselMarker(position, isPrediction = false) {
             const className = isPrediction ? 'prediction-marker' : 'vessel-marker';
             const fillColor = isPrediction ? getComputedStyle(document.documentElement).getPropertyValue('--prediction-color').trim() : 
                                            getComputedStyle(document.documentElement).getPropertyValue('--vessel-color').trim();
             
+            // Get border color based on theme
+            const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+            const borderColor = isDarkMode ? 
+                getComputedStyle(document.documentElement).getPropertyValue('--marker-border').trim() : 
+                '#FFFFFF';
+            
             return L.circleMarker(position, {
-                radius: 6,
+                radius: isPrediction ? 5 : 7,
                 fillColor: fillColor,
-                color: '#FFFFFF',
-                weight: 1.5,
-                fillOpacity: 0.9
+                color: borderColor,
+                weight: 2,
+                fillOpacity: 0.9,
+                className: className
             });
         }
 
@@ -467,33 +825,76 @@
             const lastUpdate = new Date(vesselData.current_timestamp);
             const timeDiff = Math.floor((now - lastUpdate) / 1000 / 60);
             
+            // Format prediction time
             let predictionTimeStr = '';
+            let predictionMadeStr = '';
             if (vesselData.prediction_for_timestamp) {
                 const predTime = new Date(vesselData.prediction_for_timestamp);
                 predictionTimeStr = formatDateTime(predTime);
+                
+                if (vesselData.prediction_made_at) {
+                    const predMadeTime = new Date(vesselData.prediction_made_at);
+                    const predMadeAgo = Math.floor((now - predMadeTime) / 1000 / 60);
+                    predictionMadeStr = `${predMadeAgo} min ago`;
+                }
             }
             
+            // Format country display with flag emoji if available
+            const countryStr = vesselData.country ? vesselData.country : 'Unknown';
+            
+            // Format data values with defaults and units
+            const speedStr = vesselData.sog !== null && vesselData.sog !== undefined 
+                ? `${vesselData.sog.toFixed(1)} knots` 
+                : '0.0 knots';
+                
+            const courseStr = vesselData.cog !== null && vesselData.cog !== undefined 
+                ? `${vesselData.cog.toFixed(1)}°` 
+                : '0.0°';
+                
+            // Format heading if available
+            const headingStr = vesselData.heading !== null && vesselData.heading !== undefined 
+                ? `${vesselData.heading.toFixed(1)}°` 
+                : 'N/A';
+                
+            // Format position accuracy with icon
+            const posAccStr = vesselData.pos_acc !== null && vesselData.pos_acc !== undefined 
+                ? (vesselData.pos_acc ? 'High' : 'Low') 
+                : 'Standard';
+            
+            const posAccIcon = vesselData.pos_acc 
+                ? '<i class="fas fa-check-circle" style="color: var(--success);"></i>' 
+                : '<i class="fas fa-exclamation-triangle" style="color: var(--warning);"></i>';
+                
             container.innerHTML = `
                 <div class="popup-header">
-                    <i class="fas fa-ship"></i> Vessel ID: ${vesselData.vessel_id}
+                    <i class="fas fa-ship"></i> 
+                    <span>Vessel ${vesselData.vessel_id}</span>
                 </div>
                 
                 <div class="popup-section">
                     <div class="data-row">
+                        <span class="data-label">Flag:</span>
+                        <span class="data-value">${countryStr}</span>
+                    </div>
+                    <div class="data-row">
                         <span class="data-label">Speed:</span>
-                        <span>${vesselData.sog !== null ? vesselData.sog.toFixed(1) : 'N/A'} knots</span>
+                        <span class="data-value">${speedStr}</span>
                     </div>
                     <div class="data-row">
                         <span class="data-label">Course:</span>
-                        <span>${vesselData.cog !== null ? vesselData.cog.toFixed(1) : 'N/A'}°</span>
+                        <span class="data-value">${courseStr}</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Heading:</span>
+                        <span class="data-value">${headingStr}</span>
                     </div>
                     <div class="data-row">
                         <span class="data-label">Position Accuracy:</span>
-                        <span>${vesselData.pos_acc !== null ? (vesselData.pos_acc ? 'High' : 'Low') : 'N/A'}</span>
+                        <span class="data-value">${posAccIcon} ${posAccStr}</span>
                     </div>
                     <div class="data-row">
                         <span class="data-label">Last Update:</span>
-                        <span>${timeDiff} min ago</span>
+                        <span class="data-value">${timeDiff} min ago</span>
                     </div>
                 </div>
                 
@@ -502,11 +903,11 @@
                         <div><i class="fas fa-route"></i> <strong>Prediction</strong></div>
                         <div class="data-row">
                             <span class="data-label">Predicted Position:</span>
-                            <span>${vesselData.predicted_latitude.toFixed(4)}, ${vesselData.predicted_longitude.toFixed(4)}</span>
+                            <span class="data-value">${vesselData.predicted_latitude.toFixed(4)}, ${vesselData.predicted_longitude.toFixed(4)}</span>
                         </div>
                         <div class="prediction-info">
                             <div>Prediction for: ${predictionTimeStr}</div>
-                            <div>Made at: ${formatDateTime(vesselData.prediction_made_at)}</div>
+                            <div>Made: ${predictionMadeStr}</div>
                         </div>
                     </div>
                 ` : ''}
@@ -600,12 +1001,16 @@
         async function updateVesselDisplay() {
             try {
                 const response = await fetch('/vessels');
-                if (!response.ok) throw new Error('Failed to fetch vessel data');
+                if (!response.ok) throw new Error(`Failed to fetch vessel data: ${response.status} ${response.statusText}`);
+                
                 const vesselData = await response.json();
                 lastUpdateTimestamp = new Date();
                 countdown = 10;
                 
                 let predictionCount = 0;
+                
+                // Update loading progress when data is received
+                updateLoadingProgress(100);
                 
                 // Process vessel data
                 vesselData.forEach(data => {
@@ -644,12 +1049,24 @@
                         const marker = createVesselMarker(currentPos);
                         marker.bindPopup(() => createPopupContent(data));
                         marker.addTo(map);
+                        
+                        // Add hover effect to the marker
+                        marker.on('mouseover', function() {
+                            this.setRadius(9);
+                            this.setStyle({ weight: 3 });
+                        });
+                        
+                        marker.on('mouseout', function() {
+                            this.setRadius(7);
+                            this.setStyle({ weight: 2 });
+                        });
 
                         vessels.set(vesselId, {
                             vesselId: vesselId,
                             marker,
                             predictionLine: null,
-                            predictionMarker: null
+                            predictionMarker: null,
+                            data: data
                         });
                         
                         const vessel = vessels.get(vesselId);
@@ -658,9 +1075,14 @@
                         // Update existing vessel
                         const vessel = vessels.get(vesselId);
                         
+                        // Store the updated data
+                        vessel.data = data;
+                        
                         // Update position and popup content
                         vessel.marker.setLatLng(currentPos);
-                        vessel.marker.getPopup()?.setContent(createPopupContent(data));
+                        if (vessel.marker.getPopup()) {
+                            vessel.marker.setPopupContent(createPopupContent(data));
+                        }
                         
                         // Update prediction visuals
                         updatePredictionVisuals(vessel, currentPos, predictedPos);
@@ -687,6 +1109,8 @@
 
             } catch (error) {
                 console.error('Data update error:', error);
+                // Show error in status bar or notification
+                updatePredictionStatus(false);
             }
         }
 
@@ -697,9 +1121,7 @@
 
         // Initial updates
         updateTimeDisplays();
-        updateVesselDisplay().then(() => {
-            document.querySelector('.loading-overlay').style.display = 'none';
-        });
+        updateVesselDisplay();
     </script>
 </body>
 </html>

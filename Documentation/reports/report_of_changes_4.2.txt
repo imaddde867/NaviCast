@@ -1,0 +1,25 @@
+Report of Changes - AIS Data Engineering Project
+
+1. Project Architecture Overhaul:
+   - Shifted from a single data pipeline to dual pipelines (real-time and historical).
+   - Added explicit raw data storage (PostgreSQL) to ensure data persistence and failure recovery.
+   - Integrated unified enriched data storage for consistency.
+
+2. New Data Sources:
+   - Replaced the temporarily unavailable AIS API with Digitraffic Marine Traffic API (real-time WebSocket and REST endpoints).
+   - Added MarineFinland.fi and SYKE Environmental APIs for complementary environmental data (e.g., water quality, weather).
+
+3. Tooling Adjustments:
+   - Adopted Folium for map visualization (replaced initial placeholder tools).
+   - Added Flask as the API framework for querying data.
+   - Standardized on PostgreSQL for relational data storage.
+
+4. Documentation:
+   - Created a Mermaid.js architecture diagram to visualize the system.
+   - Drafted a Data Management Plan (DMP) outline.
+
+New Data Sources:
+- Digitraffic Marine Traffic API: Real-time AIS data for Finnish waters.
+- MarineFinland.fi: Environmental data (water temperature, ice).
+- SYKE APIs: Hydrology and phytoplankton data enrichment.
+- EMODNET: EU-wide AIS data for cross-border analysis.
