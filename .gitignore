@@ -51,6 +51,12 @@ Thumbs.db
 .env
 make_clean_repo.sh
 
+# Cloud deployment files
+Procfile
+runtime.txt
+render.yaml
+build.sh
+
 # Data files (can be regenerated)
 *.csv.gz
 raw_ais_data.json
