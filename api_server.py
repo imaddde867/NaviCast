@@ -221,7 +221,7 @@ def get_vessels(
         # Build query based on filters
         query = """
         WITH latest_vessel_data AS (
-            SELECT 
+            SELECT DISTINCT ON (v.vessel_id) 
                 v.vessel_id,
                 v.latitude AS current_latitude,
                 v.longitude AS current_longitude,
@@ -260,7 +260,7 @@ def get_vessels(
             
         # Complete the query
         query += """
-            ORDER BY v.timestamp DESC
+            ORDER BY v.vessel_id, v.timestamp DESC
         )
         SELECT * FROM latest_vessel_data
         LIMIT %s
@@ -276,11 +276,19 @@ def get_vessels(
         for row in results:
             # Extract additional data from raw_json if available
             raw_data = {}
-            if row['raw_json']:
+            if row['raw_json'] and isinstance(row['raw_json'], str):
                 try:
+                    # Handle string JSON data
                     raw_data = json.loads(row['raw_json'])
-                except:
-                    logger.warning(f"Failed to parse raw_json for vessel {row['vessel_id']}")
+                except json.JSONDecodeError:
+                    # Don't log every failure, this is too verbose
+                    pass
+                except Exception:
+                    # Silently handle other errors
+                    pass
+            elif row['raw_json'] and isinstance(row['raw_json'], dict):
+                # PostgreSQL might have already parsed the JSON
+                raw_data = row['raw_json']
             
             # Get vessel type and country
             vessel_type, vessel_type_code = get_vessel_type(raw_data)
@@ -386,8 +394,22 @@ def get_vessel(vessel_id: int):
             raise HTTPException(status_code=404, detail=f"Vessel with ID {vessel_id} not found")
         
         # Process vessel data similarly to get_vessels
-        raw_json = vessel["raw_json"]
-        vessel_type, vessel_type_code = get_vessel_type(raw_json)
+        raw_data = {}
+        if vessel["raw_json"] and isinstance(vessel["raw_json"], str):
+            try:
+                # Handle string JSON data
+                raw_data = json.loads(vessel["raw_json"])
+            except json.JSONDecodeError:
+                # Don't log error, this would be too verbose
+                pass
+            except Exception:
+                # Silently handle other errors
+                pass
+        elif vessel["raw_json"] and isinstance(vessel["raw_json"], dict):
+            # PostgreSQL might have already parsed the JSON
+            raw_data = vessel["raw_json"]
+            
+        vessel_type, vessel_type_code = get_vessel_type(raw_data)
         vessel_country = get_country_from_mmsi(vessel["vessel_id"])
         nav_stat = vessel["nav_stat"]
         vessel_status = NAV_STATUS_MAP.get(nav_stat, "Unknown") if nav_stat is not None else "Unknown"
