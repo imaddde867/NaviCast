@@ -67,6 +67,3 @@ $$ LANGUAGE plpgsql;
 -- GRANT ALL PRIVILEGES ON DATABASE ais_data TO navicast;
 -- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO navicast;
 -- GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO navicast;
-
--- Sample usage of cleanup function (commented out)
--- SELECT cleanup_old_data(30); -- Keep 30 days of data 
