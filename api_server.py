@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import os
 from fastapi.responses import JSONResponse
+import urllib.parse
 
 # Configure logging
 logging.basicConfig(
@@ -24,12 +25,27 @@ logging.basicConfig(
 logger = logging.getLogger("navicast.api")
 
 # Constants
+# Default database configuration
 DB_CONFIG = {
     "dbname": "ais_project",
     "user": "postgres",
     "password": "120705imad",
     "host": "localhost"
 }
+
+# Use DATABASE_URL environment variable if available (for Render.com)
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if DATABASE_URL:
+    logger.info(f"Using DATABASE_URL from environment")
+    # Parse the connection string
+    parsed_url = urllib.parse.urlparse(DATABASE_URL)
+    DB_CONFIG = {
+        "dbname": parsed_url.path[1:],
+        "user": parsed_url.username,
+        "password": parsed_url.password,
+        "host": parsed_url.hostname,
+        "port": parsed_url.port or 5432
+    }
 
 # Map AIS navigation status codes to human-readable descriptions
 NAV_STATUS_MAP = {
@@ -489,5 +505,9 @@ if __name__ == "__main__":
     import uvicorn
     # Mount static files for the web interface
     app.mount("/", StaticFiles(directory="static", html=True), name="static")
-    logger.info(f"Starting API server on 0.0.0.0:8000 (v{app.version})")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+    # Get port from environment variable (for Render.com) or use default
+    port = int(os.environ.get("PORT", 8000))
+    
+    logger.info(f"Starting API server on 0.0.0.0:{port} (v{app.version})")
+    uvicorn.run(app, host="0.0.0.0", port=port)
