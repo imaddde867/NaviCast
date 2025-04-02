@@ -266,22 +266,6 @@ Get detailed information about a specific vessel.
 ### GET /health
 API health check endpoint.
 
-## Troubleshooting
-
-### Common Issues
-
-1. **Database Connection Errors**:
-   - Verify PostgreSQL is running: `sudo systemctl status postgresql`
-   - Check database credentials in configuration files
-
-2. **MQTT Connection Issues**:
-   - Verify internet connectivity
-   - Check MQTT logs for connection errors
-
-3. **Missing Predictions**:
-   - Ensure the prediction service is running
-   - Check prediction logs for errors
-
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
@@ -289,4 +273,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Acknowledgments
 
 - Finnish Transport Agency for providing the AIS data
-- Turku University of Applied Sciences for supporting the project development
