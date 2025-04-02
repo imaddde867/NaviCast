@@ -114,3 +114,179 @@ The platform provides detailed information for each tracked vessel, including sp
 ### 1. Database Setup
 
 First, install and configure PostgreSQL:
+
+```bash
+# Install PostgreSQL (Ubuntu/Debian)
+sudo apt update
+sudo apt install postgresql postgresql-contrib
+
+# Create the database
+sudo -u postgres psql -c "CREATE DATABASE ais_project;"
+sudo -u postgres psql -c "CREATE USER navicast WITH PASSWORD 'your_password';"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ais_project TO navicast;"
+
+# Initialize database schema
+sudo -u postgres psql -d ais_project -f schema.sql
+```
+
+### 2. Configure Environment
+
+Clone the repository and install dependencies:
+
+```bash
+# Clone the repository
+git clone https://github.com/imaddde867/NaviCast.git
+cd NaviCast
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Create logs directory
+mkdir -p logs
+```
+
+Update database connection parameters in each service file:
+- `api_server.py`
+- `mqtt_client.py`
+- `prediction_service.py`
+
+```python
+# Example database configuration
+DB_CONFIG = {
+    "dbname": "ais_project",
+    "user": "navicast",  # Replace with your database user
+    "password": "your_password",  # Replace with your password
+    "host": "localhost"
+}
+```
+
+### 3. Start the Services
+
+#### Option 1: Using the Startup Script
+
+You can use the included startup script to start all services:
+
+```bash
+# Make the script executable
+chmod +x start_navicast.sh
+
+# Run the script
+./start_navicast.sh
+```
+
+#### Option 2: Start Each Service Manually
+
+Start each service in a separate terminal:
+
+```bash
+# Terminal 1: Start the MQTT client
+python mqtt_client.py
+
+# Terminal 2: Start the prediction service
+python prediction_service.py
+
+# Terminal 3: Start the API server
+python api_server.py
+```
+
+### 4. Access the Application
+
+Once all services are running:
+
+1. Open a web browser and navigate to: http://localhost:8000
+2. The main dashboard will show vessels and predictions in the Baltic Sea
+3. The API endpoints are available at:
+   - `http://localhost:8000/vessels` - List all vessels
+   - `http://localhost:8000/vessels/{vessel_id}` - Get details for a specific vessel
+
+## Cloud Deployment
+
+### Deploying on Render.com (Free Tier)
+
+NAVICAST can be deployed to the cloud using Render.com's free tier:
+
+### 1. Create a Render.com Account
+1. Go to [Render.com](https://render.com/) and sign up for a free account
+2. Verify your email address and log in
+
+### 2. Create a PostgreSQL Database
+1. In your Render dashboard, click on the "New +" button
+2. Select "PostgreSQL" from the dropdown menu
+3. Fill in the database details:
+   - Name: `navicast-db`
+   - Database: `ais_project`
+   - User: Leave as auto-generated
+   - Region: Select the region closest to your users
+   - PostgreSQL Version: 13 or higher
+   - Instance Type: Free tier
+4. Click "Create Database"
+5. Once created, note down the database connection details
+
+### 3. Create the Web Service
+1. Click on "New +" again and select "Web Service"
+2. Connect your GitHub repository
+3. Configure the web service:
+   - Name: `navicast-web`
+   - Environment: Python
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `python api_server.py`
+   - Instance Type: Free
+4. Add the environment variable:
+   - `DATABASE_URL`: Internal Connection String from your database
+5. Click "Create Web Service"
+
+### 4. Create Worker Services
+Create two background worker services following the same steps as above:
+
+1. MQTT Client Worker:
+   - Start Command: `python mqtt_client.py`
+   
+2. Prediction Service Worker:
+   - Start Command: `python prediction_service.py`
+
+### 5. Access Your Application
+Your application will be available at the URL provided by Render (e.g., https://navicast-web.onrender.com)
+
+## API Documentation
+
+The NAVICAST API provides the following endpoints:
+
+### GET /vessels
+Lists all vessels with their current positions and predictions.
+
+Query parameters:
+- `mmsi`: Filter by vessel MMSI
+- `from_time`: Filter by time range (start)
+- `to_time`: Filter by time range (end)
+- `limit`: Maximum number of vessels to return (default: 100)
+
+### GET /vessels/{vessel_id}
+Get detailed information about a specific vessel.
+
+### GET /health
+API health check endpoint.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Database Connection Errors**:
+   - Verify PostgreSQL is running: `sudo systemctl status postgresql`
+   - Check database credentials in configuration files
+
+2. **MQTT Connection Issues**:
+   - Verify internet connectivity
+   - Check MQTT logs for connection errors
+
+3. **Missing Predictions**:
+   - Ensure the prediction service is running
+   - Check prediction logs for errors
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- Finnish Transport Agency for providing the AIS data
+- Turku University of Applied Sciences for supporting the project development
