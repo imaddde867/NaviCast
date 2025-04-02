@@ -62,4 +62,5 @@ build.sh
 raw_ais_data.json
 
 # Jupyter Notebook
+.ipynb_checkpoints/
 .ipynb_checkpoints *.log
