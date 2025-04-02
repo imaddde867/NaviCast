@@ -9,7 +9,6 @@ import time
 import schedule
 import traceback
 import os
-import urllib.parse
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional, Any
 
@@ -35,20 +34,6 @@ DB_CONFIG = {
     'password': '120705imad',
     'host': 'localhost'
 }
-
-# Use DATABASE_URL environment variable if available (for Render.com)
-DATABASE_URL = os.environ.get('DATABASE_URL')
-if DATABASE_URL:
-    logger.info(f"Using DATABASE_URL from environment")
-    # Parse the connection string
-    parsed_url = urllib.parse.urlparse(DATABASE_URL)
-    DB_CONFIG = {
-        "dbname": parsed_url.path[1:],
-        "user": parsed_url.username,
-        "password": parsed_url.password,
-        "host": parsed_url.hostname,
-        "port": parsed_url.port or 5432
-    }
 
 # Baltic Sea boundaries (for validation)
 LAT_MIN = 53
