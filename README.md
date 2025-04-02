@@ -231,4 +231,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Acknowledgments
 
 - Finnish Transport Agency for providing the AIS data
-- Turku University of Applied Sciences for supporting the project development
