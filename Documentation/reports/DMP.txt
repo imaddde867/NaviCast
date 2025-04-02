@@ -1,0 +1,35 @@
+Data Management Plan (DMP) - AIS Data Engineering Project
+
+1. Data Collection & Use:
+   - Primary Data: AIS data (real-time and historical) from Digitraffic API.
+   - Environmental Data: Water quality and weather data from MarineFinland.fi and SYKE APIs.
+
+2. FAIR Principles:
+   - Findable: Metadata stored in PostgreSQL; APIs documented with OpenAPI/Swagger.
+   - Accessible: Raw data via SQL queries; enriched data via REST API.
+   - Interoperable: Data formats include JSON, CSV/Parquet, and SQL.
+   - Reusable: Public datasets licensed under CC BY 4.0.
+
+3. Methodologies & Standards:
+   - Data Standards: IEC 62320-1 for AIS; Dublin Core for metadata.
+   - Tools: Python (Pandas, TensorFlow), PostgreSQL, Flask.
+
+4. Data Curation:
+   - Cleaning: Remove duplicates, invalid coordinates, and outliers.
+   - Enrichment: AI/ML model for trajectory prediction.
+
+5. Ownership & Rights:
+   - Ownership: AIS data (public domain); enriched data (project team).
+   - Licensing: Project data under CC BY-SA 4.0.
+
+6. Data Accessibility:
+   - During Project: Internal access via PostgreSQL; external access via Flask API.
+   - Post-Project: Public Zenodo repository for datasets; code on GitLab.
+
+7. Ethics & Security:
+   - Ethics: No PII stored; environmental data used for non-commercial research.
+   - Security: Database encrypted at rest; API endpoints use HTTPS.
+
+8. Costs:
+   - Storage: Free tier (AWS).
+   - Processing: Free tier for ML (Google Colab).
