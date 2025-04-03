@@ -24,7 +24,7 @@ NAVICAST consists of four main components:
 
 ## Machine Learning Model
 
-NAVICAST uses an advanced machine learning model to predict vessel positions 30 minutes into the future (upgraded from the previous 5-minute prediction window). The model was trained on 363,899 vessel position records collected from the Baltic Sea region, allowing it to learn complex vessel movement patterns under various conditions. This provides maritime traffic controllers, port authorities, and vessel operators with enhanced situational awareness and planning capabilities. For a detailed analysis of the model architecture and training process, see the [technical documentation](docs/ML_Model_docs/ML_Model.pdf) and [model visualizations](docs/ML_Model_docs/README.md).
+NAVICAST uses an advanced machine learning model to predict vessel positions 30 minutes into the future (upgraded from the previous 5-minute prediction window). The model was trained on 363,899 vessel position records collected from the Baltic Sea region, allowing it to learn complex vessel movement patterns under various conditions. This provides maritime traffic controllers, port authorities, and vessel operators with enhanced situational awareness and planning capabilities. For a detailed analysis of the model architecture and training process, see the [technical documentation](docs/ML_Model.pdf).
 
 > **Note**: The application can run without the ML model file by using a fallback dead reckoning method for predictions.
 
@@ -46,7 +46,7 @@ The model was evaluated on its ability to predict vessel positions 30 minutes ah
 **Note**: The screenshots below may not reflect the most recent UI enhancements.
 
 <p align="center">
-  <video src="static/dashboard.mp4" alt="Vessel Prediction Map" autoplay loop muted width="100%"></video>
+  <img src="static/dashboard.png" alt="Vessel Prediction Map">
 </p>
 
 <p align="center">
