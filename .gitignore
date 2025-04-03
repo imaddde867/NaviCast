@@ -23,6 +23,9 @@ var/
 # Logs
 *.log
 logs/
+*.log.*
+*_log
+log/
 mqtt_output.log
 prediction_output.log
 api_output.log
