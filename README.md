@@ -11,7 +11,10 @@ NAVICAST is a comprehensive system for collecting, processing, and visualizing m
 The NAVICAST platform is now live at [navicast.tech](http://navicast.tech)! Visit to see real-time vessel tracking and predictions in the Baltic Sea region.
 
 <p align="center">
-  <img src="static/screenshots/navicast_live.png" alt="NAVICAST Live Website">
+  <video width="640" height="360" controls>
+    <source src="static/dashboard.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
 </p>
 
 The live platform features:
