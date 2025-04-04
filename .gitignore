@@ -26,6 +26,7 @@ logs/
 mqtt_output.log
 prediction_output.log
 api_output.log
+*.log.*
 
 # Virtual Environment
 venv/
