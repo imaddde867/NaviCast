@@ -6,6 +6,21 @@ NAVICAST is a comprehensive system for collecting, processing, and visualizing m
   <img src="static/NAVICAST-logo/logo-white.svg" alt="NAVICAST Logo">
 </p>
 
+## Live Website
+
+The NAVICAST platform is now live at [navicast.tech](http://navicast.tech)! Visit to see real-time vessel tracking and predictions in the Baltic Sea region.
+
+<p align="center">
+  <img src="static/screenshots/navicast_live.png" alt="NAVICAST Live Website">
+</p>
+
+The live platform features:
+- Real-time vessel tracking with position updates
+- AI-powered trajectory predictions (30 minutes ahead)
+- Interactive map with filtering capabilities
+- Detailed vessel information on-demand
+- Dark/light mode support
+
 ## System Overview
 
 NAVICAST consists of four main components:

@@ -68,3 +68,13 @@ raw_ais_data.json
 # Prediction model (if large and stored separately)
 *.joblib
 model.onnx
+logs/api_server.log
+
+# Deployment files and keys
+*.pem
+manage_ec2.sh
+monitor_aws_usage.sh
+adjust_retention.sh
+*_deployment.md
+deployment_*.txt
+bucket_policy.json
