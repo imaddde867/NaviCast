@@ -61,11 +61,7 @@ The model was evaluated on its ability to predict vessel positions 30 minutes ah
 
 ### Prediction Visualization
 
-**Note**: The screenshots below may not reflect the most recent UI enhancements.
-
-<p align="center">
-  <img src="static/dashboard.png" alt="Vessel Prediction Map">
-</p>
+For a complete visualization of the system in action, please refer to the dashboard demonstration video above in the Live Website section.
 
 <p align="center">
   <img src="static/accuracy.png" alt="Prediction Accuracy">
