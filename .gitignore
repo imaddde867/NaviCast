@@ -1,0 +1,81 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Logs
+*.log
+logs/
+mqtt_output.log
+prediction_output.log
+api_output.log
+*.log.*
+
+# Virtual Environment
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific
+*.pkl
+.env
+make_clean_repo.sh
+
+# Cloud deployment files
+Procfile
+runtime.txt
+render.yaml
+build.sh
+
+# Data files (can be regenerated)
+*.csv.gz
+raw_ais_data.json
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+.ipynb_checkpoints *.log
+
+# Prediction model (if large and stored separately)
+*.joblib
+model.onnx
+logs/api_server.log
+
+# Deployment files and keys
+*.pem
+manage_ec2.sh
+monitor_aws_usage.sh
+adjust_retention.sh
+*_deployment.md
+deployment_*.txt
+bucket_policy.json

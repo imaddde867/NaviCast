@@ -1,0 +1,1746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NAVICAST - Maritime Intelligence Platform</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            /* Light theme colors */
+            --primary-blue: #1A365D;
+            --secondary-blue: #2A4B7C;
+            --accent-blue: #4A6FA5;
+            --accent-orange: #FF9800;
+            --prediction-color: #FF9800;
+            --vessel-color: #2A4B7C;
+            --text-light: #F5F5F5;
+            --text-dark: #333333;
+            --background-light: #FFFFFF;
+            --background-dark: #1A1A1A;
+            --panel-bg: rgba(255, 255, 255, 0.95);
+            --panel-border: rgba(0, 0, 0, 0.1);
+            --danger: #F44336;
+            --success: #4CAF50;
+            --warning: #FF9800;
+            --info: #2196F3;
+        }
+
+        [data-theme="dark"] {
+            --primary-blue: #1E3A5F;
+            --secondary-blue: #2C4F81;
+            --accent-blue: #3F5F8F;
+            --vessel-color: #5D8ACA;
+            --text-light: #F5F5F5;
+            --text-dark: #E0E0E0;
+            --background-light: #121212;
+            --background-dark: #000000;
+            --panel-bg: rgba(33, 33, 33, 0.95);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --marker-border: rgba(33, 33, 33, 0.8);
+            --prediction-info-color: rgba(255, 255, 255, 0.6);
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--background-light);
+            color: var(--text-dark);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .header {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            height: 60px;
+            background: var(--primary-blue);
+            display: flex;
+            align-items: center;
+            padding: 0 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            box-sizing: border-box;
+        }
+
+        .logo {
+            height: 40px;
+            margin-right: 1rem;
+        }
+
+        .title {
+            color: var(--text-light);
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .stats {
+            margin-left: auto;
+            color: var(--text-light);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        #map {
+            height: calc(100vh - 110px);
+            margin-top: 60px;
+            z-index: 1;
+        }
+
+        .control-panel {
+            position: absolute;
+            top: 80px;
+            right: 10px;
+            background: var(--panel-bg);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 990;
+            width: 250px;
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-border);
+            transition: background-color 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+        }
+
+        .control-panel.collapsed {
+            transform: translateX(calc(100% - 30px));
+        }
+
+        .panel-toggle {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%) translateX(-50%);
+            background: var(--panel-bg);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            border: 1px solid var(--panel-border);
+            z-index: 991;
+            transition: background-color 0.3s ease;
+        }
+
+        .panel-toggle i {
+            color: var(--secondary-blue);
+            font-size: 0.85rem;
+            transition: transform 0.3s ease;
+        }
+
+        .control-panel.collapsed .panel-toggle i {
+            transform: rotate(180deg);
+        }
+
+        .control-section {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--panel-border);
+        }
+
+        .control-section:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .control-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            font-size: 0.95rem;
+            color: var(--secondary-blue);
+        }
+
+        .control-item {
+            margin-bottom: 10px;
+        }
+
+        .control-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .time-footer {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            height: 50px;
+            background: rgba(26, 54, 93, 0.95);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 2rem;
+            color: var(--text-light);
+            font-size: 0.9rem;
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            box-sizing: border-box;
+        }
+
+        .vessel-marker {
+            background-color: var(--vessel-color);
+            border: 2px solid white;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+        }
+
+        [data-theme="dark"] .vessel-marker {
+            border-color: var(--marker-border);
+            box-shadow: 0 0 10px rgba(93, 138, 202, 0.6);
+        }
+
+        .prediction-marker {
+            background-color: var(--prediction-color);
+            border: 2px solid white;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 8px rgba(255, 152, 0, 0.6);
+        }
+
+        [data-theme="dark"] .prediction-marker {
+            border-color: var(--marker-border);
+            box-shadow: 0 0 8px rgba(255, 152, 0, 0.8);
+        }
+
+        .prediction-line {
+            stroke: var(--prediction-color);
+            stroke-dasharray: 5,5;
+            opacity: 0.7;
+            stroke-width: 2;
+            transition: all 0.3s ease;
+        }
+
+        .leaflet-popup-content {
+            min-width: 280px;
+            font-size: 0.95rem;
+        }
+
+        [data-theme="dark"] .leaflet-popup-content-wrapper {
+            background-color: rgba(33, 33, 33, 0.95);
+            color: var(--text-light);
+        }
+
+        [data-theme="dark"] .leaflet-popup-tip {
+            background-color: rgba(33, 33, 33, 0.95);
+        }
+
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            align-items: center;
+        }
+
+        .data-label {
+            color: var(--text-dark);
+            font-weight: 500;
+            opacity: 0.8;
+        }
+
+        [data-theme="dark"] .data-label {
+            color: rgba(255, 255, 255, 0.9);
+            opacity: 1;
+        }
+
+        .data-value {
+            font-weight: 500;
+        }
+
+        [data-theme="dark"] .data-value {
+            color: #FFFFFF;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 60px;
+            left: 0;
+            right: 0;
+            bottom: 50px;
+            background: var(--panel-bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+            backdrop-filter: blur(8px);
+            transition: opacity 0.5s ease;
+        }
+
+        .loader {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            max-width: 300px;
+        }
+
+        .loader i {
+            font-size: 3rem;
+            color: var(--accent-orange);
+            margin-bottom: 1.5rem;
+        }
+
+        .loader-progress {
+            width: 100%;
+            height: 4px;
+            background-color: rgba(0, 0, 0, 0.1);
+            border-radius: 2px;
+            margin-top: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .loader-progress-bar {
+            height: 100%;
+            background-color: var(--accent-orange);
+            width: 0%;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        .btn {
+            padding: 8px 15px;
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background-color: var(--secondary-blue);
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        .btn-block {
+            width: 100%;
+            display: flex;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.25);
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        input:checked + .slider {
+            background-color: var(--accent-orange);
+        }
+
+        input:focus + .slider {
+            box-shadow: 0 0 1px var(--accent-orange);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .status-active {
+            background-color: var(--success);
+            box-shadow: 0 0 5px var(--success);
+        }
+
+        .status-inactive {
+            background-color: var(--danger);
+            box-shadow: 0 0 5px var(--danger);
+        }
+
+        .popup-header {
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+            font-weight: bold;
+            font-size: 1.05rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        [data-theme="dark"] .popup-header {
+            border-bottom-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .popup-section {
+            margin-top: 12px;
+        }
+
+        .popup-prediction {
+            background-color: rgba(255, 152, 0, 0.1);
+            border-left: 3px solid var(--accent-orange);
+            padding: 12px;
+            margin-top: 15px;
+            border-radius: 0 4px 4px 0;
+        }
+
+        [data-theme="dark"] .popup-prediction {
+            background-color: rgba(255, 152, 0, 0.15);
+        }
+
+        .prediction-info {
+            font-size: 0.85rem;
+            color: rgba(0, 0, 0, 0.6);
+            margin-top: 8px;
+        }
+
+        [data-theme="dark"] .prediction-info {
+            color: var(--prediction-info-color);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .legend-marker {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            border: 1px solid white;
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+        }
+
+        [data-theme="dark"] .legend-marker {
+            border-color: var(--marker-border);
+        }
+
+        .legend-line {
+            width: 20px;
+            height: 2px;
+            margin-right: 8px;
+        }
+
+        /* Dark mode toggle */
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .theme-toggle i {
+            font-size: 1.1rem;
+            margin-right: 5px;
+        }
+
+        /* Responsive styles */
+        @media (max-width: 768px) {
+            .header {
+                padding: 0 1rem;
+            }
+            
+            .title {
+                font-size: 1.2rem;
+            }
+            
+            .stats {
+                font-size: 0.8rem;
+                flex-direction: column;
+                align-items: flex-end;
+                gap: 5px;
+            }
+            
+            .control-panel {
+                top: auto;
+                bottom: 60px;
+                right: 10px;
+                max-width: calc(100% - 20px);
+                width: 220px;
+            }
+            
+            .control-panel.collapsed {
+                transform: translateX(calc(100% - 25px));
+            }
+            
+            .time-footer {
+                padding: 0 1rem;
+                font-size: 0.8rem;
+            }
+        }
+
+        /* Vessel direction indicator */
+        .vessel-direction {
+            position: absolute;
+            width: 0;
+            height: 0;
+            left: 50%;
+            top: 50%;
+            transform-origin: center;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 12px solid rgba(255, 255, 255, 0.8);
+            margin-left: -6px;
+            margin-top: -2px;
+            pointer-events: none;
+            transition: transform 0.3s ease;
+            filter: drop-shadow(0 0 1px rgba(0,0,0,0.5));
+        }
+            
+        [data-theme="dark"] .vessel-direction {
+            border-bottom-color: rgba(33, 33, 33, 0.8);
+            filter: drop-shadow(0 0 1px rgba(255,255,255,0.5));
+        }
+
+        /* Enhance vessel markers and indicators */
+        .vessel-marker {
+            transition: all 0.3s ease;
+        }
+
+        .vessel-marker:hover {
+            transform: scale(1.2);
+            z-index: 1000 !important;
+        }
+
+        /* Improve prediction indicator */
+        .vessel-direction {
+            position: absolute;
+            width: 0;
+            height: 0;
+            left: 50%;
+            top: 50%;
+            transform-origin: center;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 12px solid rgba(255, 255, 255, 0.8);
+            margin-left: -6px;
+            margin-top: -2px;
+            pointer-events: none;
+            transition: transform 0.3s ease;
+            filter: drop-shadow(0 0 1px rgba(0,0,0,0.5));
+        }
+            
+        [data-theme="dark"] .vessel-direction {
+            border-bottom-color: rgba(33, 33, 33, 0.8);
+            filter: drop-shadow(0 0 1px rgba(255,255,255,0.5));
+        }
+
+        /* Improve popup styling */
+        .leaflet-popup-content-wrapper {
+            border-radius: 8px;
+            box-shadow: 0 3px 14px rgba(0,0,0,0.2);
+        }
+
+        /* Moving vessel indicator */
+        .moving-vessel {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+
+        /* Status badges */
+        .status-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-left: 6px;
+        }
+
+        .status-moving {
+            background-color: rgba(46, 204, 113, 0.2);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .status-stationary {
+            background-color: rgba(241, 196, 15, 0.2);
+            color: var(--warning);
+            border: 1px solid var(--warning);
+        }
+
+        /* New filters section */
+        .quick-filters {
+            padding: 8px 0;
+        }
+
+        .filter-button {
+            background: rgba(100, 100, 100, 0.1);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 3px 8px;
+            font-size: 0.8rem;
+            margin-right: 4px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            display: inline-block;
+            color: var(--text-dark);
+        }
+
+        .filter-button:hover {
+            background: rgba(100, 100, 100, 0.2);
+        }
+
+        .filter-button.active {
+            background: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+        }
+
+        [data-theme="dark"] .filter-button {
+            background: rgba(200, 200, 200, 0.1);
+        }
+
+        [data-theme="dark"] .filter-button:hover {
+            background: rgba(200, 200, 200, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <img src="NAVICAST-logo/logo-white.svg" class="logo" alt="NAVICAST Logo">
+        <div class="title">Maritime Intelligence Platform</div>
+        <div class="stats">
+            <div class="stat-item">
+                <i class="fas fa-ship"></i>
+                <span>Vessels: <span id="vessel-count">0</span></span>
+            </div>
+            <div class="stat-item">
+                <i class="fas fa-route"></i>
+                <span>Predictions: <span id="prediction-count">0</span></span>
+            </div>
+        </div>
+    </header>
+
+    <div id="map"></div>
+
+    <div class="control-panel" id="control-panel">
+        <div class="panel-toggle" id="panel-toggle">
+            <i class="fas fa-chevron-right"></i>
+        </div>
+        
+        <div class="control-section">
+            <div class="control-title">Quick Filters</div>
+            <div class="quick-filters">
+                <div class="filter-button" id="filter-all">All Vessels</div>
+                <div class="filter-button" id="filter-moving">Moving</div>
+                <div class="filter-button" id="filter-stationary">Stationary</div>
+                <div class="filter-button" id="filter-predictable">Predictable</div>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <div class="control-title">Display Options</div>
+            <div class="control-item">
+                <div class="data-row">
+                    <label for="toggle-predictions">Show Predictions</label>
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-predictions" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="control-item">
+                <div class="data-row theme-toggle" id="theme-toggle">
+                    <span>
+                        <i class="fas fa-moon"></i>
+                        Dark Mode
+                    </span>
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-theme">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <div class="control-title">System Status</div>
+            <div class="control-item">
+                <div class="data-row">
+                    <span>Prediction Service:</span>
+                    <span>
+                        <span class="status-indicator" id="prediction-status"></span>
+                        <span id="prediction-status-text">Checking...</span>
+                    </span>
+                </div>
+            </div>
+            <div class="control-item">
+                <div class="data-row">
+                    <span>Data Refresh:</span>
+                    <span id="refresh-countdown">10s</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <div class="control-title">Map Controls</div>
+            <div class="control-item">
+                <button id="center-map" class="btn btn-block">
+                    <i class="fas fa-location-crosshairs"></i>
+                    Center on Finland
+                </button>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <div class="control-title">Legend</div>
+            <div class="control-item">
+                <div class="legend-item">
+                    <div class="legend-marker" style="background: var(--vessel-color);"></div>
+                    Current Position
+                </div>
+                <div class="legend-item">
+                    <div class="legend-marker" style="background: var(--prediction-color);"></div>
+                    Predicted Position
+                </div>
+                <div class="legend-item">
+                    <div class="legend-line" style="background: var(--prediction-color); opacity: 0.7;"></div>
+                    Predicted Path
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="time-footer">
+        <div class="current-time">
+            <i class="fas fa-clock"></i>
+            <span id="current-time"></span>
+        </div>
+        <div>
+            <i class="fas fa-sync"></i> 
+            Auto-refresh in <span id="refresh-countdown-footer">10</span>s
+        </div>
+        <div class="last-update">
+            <i class="fas fa-history"></i>
+            Last Update: <span id="last-update-time">-</span>
+        </div>
+    </footer>
+
+    <div class="loading-overlay">
+        <div class="loader">
+            <i class="fas fa-ship fa-spin"></i>
+            <h2>NAVICAST</h2>
+            <div>Loading vessel tracking data from the Baltic Sea...</div>
+            <div class="loader-progress">
+                <div class="loader-progress-bar" id="loader-progress-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        // --- Constants ---
+        const UPDATE_INTERVAL_MS = 10000; // 10 seconds
+        const COUNTDOWN_SECONDS = 10;
+        const MIN_SPEED_MOVING_KNOTS = 0.5;
+        const PREDICTION_HOURS_AHEAD = 0.5; // 30 minutes
+        const MAX_PREDICTION_DISTANCE_NM = 15; // Max distance for valid 30-min prediction
+        const MAX_VALID_SPEED_KNOTS = 50; // Max speed for movement validation
+        const BALTIC_SEA_BOUNDS = {
+            minLat: 53, maxLat: 66, minLon: 9, maxLon: 30
+        };
+        const FINLAND_CENTER = [60.5, 22.5];
+        const FINLAND_ZOOM = 7;
+        
+        // --- Global State ---
+        const vessels = new Map();
+        let lastUpdateTimestamp = null;
+        let countdown = COUNTDOWN_SECONDS;
+        let showPredictionLines = true;
+        let activeFilter = 'all'; // Default filter
+        let loadingProgressInterval = null; // For loading animation
+        
+        // --- Map Initialization ---
+        const map = L.map('map', {
+            preferCanvas: true,
+            zoomSnap: 0.5,
+            inertia: true,
+            renderer: L.canvas({ padding: 0.5 }),
+            zoomControl: false
+        }).setView([59.5, 20], 6); // Initial broad view
+
+        // Add zoom control
+        L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+        // Tile layers
+        const lightTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/attribution">CARTO</a>',
+            maxZoom: 18
+        });
+        const darkTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/attribution">CARTO</a>',
+            maxZoom: 18
+        });
+        // Initial theme is set in initializeApp
+
+        // --- Event Listeners ---
+        function setupEventListeners() {
+            document.getElementById('panel-toggle').addEventListener('click', toggleControlPanel);
+            document.addEventListener('keydown', handleGlobalKeydown);
+            document.getElementById('center-map').addEventListener('click', centerMapOnFinland);
+            document.getElementById('toggle-predictions').addEventListener('change', handlePredictionToggle);
+            document.getElementById('toggle-theme').addEventListener('change', handleThemeToggle);
+            document.getElementById('filter-all').addEventListener('click', () => setFilter('all'));
+            document.getElementById('filter-moving').addEventListener('click', () => setFilter('moving'));
+            document.getElementById('filter-stationary').addEventListener('click', () => setFilter('stationary'));
+            document.getElementById('filter-predictable').addEventListener('click', () => setFilter('predictable'));
+        }
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', initializeApp);
+
+        function initializeApp() {
+            initPanelState();
+            initThemeState();
+            startTimers();
+            setupEventListeners();
+            startLoadingAnimation(); // Show initial loading
+            fetchAndDisplayVessels(); // Initial data load
+        }
+
+        function startTimers() {
+            setInterval(updateCountdown, 1000);
+            setInterval(updateTimeDisplays, 1000);
+            setInterval(fetchAndDisplayVessels, UPDATE_INTERVAL_MS);
+        }
+
+        // --- UI Handlers ---
+        function handleGlobalKeydown(e) {
+            // Toggle panel with 'p' key
+            if (e.key === 'p' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                // Avoid toggling if typing in an input field
+                if (document.activeElement.tagName !== 'INPUT') {
+                     toggleControlPanel();
+                }
+            }
+        }
+        
+        function centerMapOnFinland() {
+            map.flyTo(FINLAND_CENTER, FINLAND_ZOOM, { duration: 1.5 });
+        }
+
+        function handlePredictionToggle(e) {
+            showPredictionLines = this.checked;
+            // Toggle visibility of existing prediction lines/markers
+            vessels.forEach(vessel => {
+                toggleLayerVisibility(vessel.predictionLine, showPredictionLines);
+                toggleLayerVisibility(vessel.predictionMarker, showPredictionLines);
+            });
+        }
+
+        function handleThemeToggle(e) {
+            setTheme(this.checked ? 'dark' : 'light');
+        }
+        
+        function setTheme(theme) {
+            const isDarkMode = theme === 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('navicast_theme', theme);
+
+            // Update map tiles
+            if (isDarkMode) {
+                if (!map.hasLayer(darkTileLayer)) darkTileLayer.addTo(map);
+                if (map.hasLayer(lightTileLayer)) map.removeLayer(lightTileLayer);
+            } else {
+                if (!map.hasLayer(lightTileLayer)) lightTileLayer.addTo(map);
+                if (map.hasLayer(darkTileLayer)) map.removeLayer(darkTileLayer);
+            }
+            updateMarkerStyles(); // Update existing marker borders
+        }
+
+        function updateMarkerStyles() {
+            const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+            const borderColor = isDarkMode 
+                ? getComputedStyle(document.documentElement).getPropertyValue('--marker-border').trim() 
+                : '#FFFFFF'; // Default light mode border
+                
+            vessels.forEach(vessel => {
+                vessel.marker?.setStyle({ color: borderColor });
+                vessel.predictionMarker?.setStyle({ color: borderColor });
+            });
+        }
+
+        function setFilter(filterName) {
+            activeFilter = filterName;
+            // Update button visual state
+            document.querySelectorAll('.filter-button').forEach(button => button.classList.remove('active'));
+            document.getElementById(`filter-${filterName}`)?.classList.add('active');
+            // Apply the filter to visible vessels
+            applyVesselFilter();
+        }
+
+        function toggleControlPanel() {
+            const panel = document.getElementById('control-panel');
+            const isCollapsed = panel.classList.toggle('collapsed');
+            localStorage.setItem('navicast_panel_collapsed', isCollapsed);
+        }
+        
+        function initPanelState() {
+            if (localStorage.getItem('navicast_panel_collapsed') === 'true') {
+                document.getElementById('control-panel').classList.add('collapsed');
+            }
+        }
+
+        function initThemeState() {
+            const savedTheme = localStorage.getItem('navicast_theme');
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+            document.getElementById('toggle-theme').checked = initialTheme === 'dark';
+            setTheme(initialTheme); // Apply the initial theme
+        }
+
+        // --- Time and Loading UI ---
+        function updateTimeDisplays() {
+            const now = new Date();
+            const currentTimeEl = document.getElementById('current-time');
+            if (currentTimeEl) currentTimeEl.textContent = now.toLocaleTimeString();
+            
+            if (lastUpdateTimestamp) {
+                const timeAgo = Math.round((now - lastUpdateTimestamp) / 1000);
+                const lastUpdateEl = document.getElementById('last-update-time');
+                if (lastUpdateEl) lastUpdateEl.textContent = formatTimeAgo(timeAgo);
+            }
+        }
+
+        function formatTimeAgo(seconds) {
+            if (seconds < 60) return `${seconds} sec ago`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+            return `${Math.floor(seconds / 3600)} hr ${Math.floor((seconds % 3600) / 60)} min ago`;
+        }
+
+        function updateCountdown() {
+            countdown = countdown > 0 ? countdown - 1 : COUNTDOWN_SECONDS;
+            const countdownPanelEl = document.getElementById('refresh-countdown');
+            const countdownFooterEl = document.getElementById('refresh-countdown-footer');
+            if (countdownPanelEl) countdownPanelEl.textContent = `${countdown}s`;
+            if (countdownFooterEl) countdownFooterEl.textContent = countdown;
+        }
+
+        function startLoadingAnimation() {
+            const overlay = document.querySelector('.loading-overlay');
+            const loaderText = overlay?.querySelector('.loader div');
+            if(overlay) overlay.style.display = 'flex'; // Ensure visible
+            if(loaderText) loaderText.textContent = 'Loading vessel tracking data...'; // Reset text
+
+            let progress = 0;
+            updateLoadingProgress(progress); 
+            
+            if (loadingProgressInterval) clearInterval(loadingProgressInterval); 
+            loadingProgressInterval = setInterval(() => {
+                progress += 5; 
+                updateLoadingProgress(progress);
+                // Stop simulation before reaching 100%, actual data fetch will complete it
+                if (progress >= 95) clearInterval(loadingProgressInterval); 
+            }, 100);
+        }
+
+        function updateLoadingProgress(progress) {
+            const progressBar = document.getElementById('loader-progress-bar');
+            const overlay = document.querySelector('.loading-overlay');
+            const loaderText = overlay?.querySelector('.loader div');
+
+            if (progress >= 0) {
+                 // Update progress bar smoothly
+                 if (progressBar) progressBar.style.width = `${Math.min(progress, 100)}%`;
+            }
+           
+            if (progress >= 100) {
+                // Fade out loading overlay only if it's currently displayed
+                if (overlay && overlay.style.display !== 'none') {
+                     if (loadingProgressInterval) clearInterval(loadingProgressInterval); // Ensure interval stops
+                     overlay.style.opacity = 0;
+                     setTimeout(() => overlay.style.display = 'none', 500); 
+                }
+            } else if (progress < 0) { // Indicate error state
+                 if (overlay && overlay.style.display !== 'none') {
+                     if (loaderText) loaderText.textContent = 'Error loading data. Retrying...';
+                     // Optionally reset progress bar or change color for error indication
+                     if (progressBar) progressBar.style.width = `0%`; 
+                     // Consider adding a specific error style to the progress bar
+                 }
+            }
+        }
+        
+        function updatePredictionStatus(apiPredictionCount) {
+            const statusIndicator = document.getElementById('prediction-status');
+            const statusText = document.getElementById('prediction-status-text');
+            const noticeContainer = statusText?.parentElement?.parentElement; 
+            let notice = document.getElementById('prediction-notice');
+
+            if (!statusIndicator || !statusText) return; // Elements not found
+
+            if (apiPredictionCount > 0) {
+                statusIndicator.className = 'status-indicator status-active';
+                statusText.textContent = 'Active';
+                notice?.remove(); // Remove notice if AI predictions are active
+            } else {
+                statusIndicator.className = 'status-indicator status-inactive';
+                statusText.textContent = 'Inactive';
+                
+                // Add notice only if it doesn't exist, we have vessels, and the container exists
+                if (vessels.size > 0 && !notice && noticeContainer) {
+                    notice = document.createElement('div');
+                    notice.id = 'prediction-notice';
+                    notice.style.cssText = 'font-size: 0.85rem; opacity: 0.7; margin-top: 5px;';
+                    notice.textContent = 'Using calculated paths';
+                    noticeContainer.appendChild(notice);
+                } else if (vessels.size === 0 && notice) {
+                     notice.remove(); // Remove notice if no vessels loaded
+                }
+            }
+        }
+
+        // --- Vessel Marker and Popup ---
+        function createVesselMarker(position, isPrediction = false, course = 0) {
+            const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+            const vesselColor = getComputedStyle(document.documentElement).getPropertyValue(
+                isPrediction ? '--prediction-color' : '--vessel-color'
+            ).trim();
+            const borderColor = isDarkMode 
+                ? getComputedStyle(document.documentElement).getPropertyValue('--marker-border').trim() 
+                : '#FFFFFF';
+                
+            const marker = L.circleMarker(position, {
+                radius: isPrediction ? 6 : 7,
+                color: borderColor, // Border color depends on theme
+                weight: 1.5,
+                fillColor: vesselColor, // Fill color depends on type
+                fillOpacity: 0.9,
+                className: `vessel-marker ${!isPrediction ? 'vessel-actual' : 'vessel-prediction'}`
+            });
+            
+            marker.course = course; // Store course directly on the marker object
+            
+            // Add direction indicator for non-prediction markers
+            if (!isPrediction && course !== undefined) {
+                // Delay slightly to ensure the marker's DOM element is ready
+                setTimeout(() => addDirectionIndicator(marker), 50); 
+            }
+            
+            // Add a method to the marker for updating its direction
+            marker.updateDirection = function(newCourse) {
+                this.course = newCourse;
+                updateDirectionIndicator(this);
+            };
+            
+            return marker;
+        }
+        
+        function addDirectionIndicator(marker) {
+            const element = marker.getElement();
+            // Don't add if element doesn't exist or indicator already present
+            if (!element || element.querySelector('.vessel-direction')) return; 
+            
+            const directionIndicator = document.createElement('div');
+            directionIndicator.className = 'vessel-direction';
+            // Set initial rotation based on marker's course
+            directionIndicator.style.transform = `rotate(${marker.course}deg)`;
+            element.appendChild(directionIndicator);
+        }
+        
+        function updateDirectionIndicator(marker) {
+            const element = marker.getElement();
+            const directionIndicator = element?.querySelector('.vessel-direction');
+            // Update rotation if the indicator exists
+            if (directionIndicator) {
+                directionIndicator.style.transform = `rotate(${marker.course}deg)`;
+            }
+        }
+        
+        function updateVesselDirection(vessel, course) {
+            if (!vessel?.marker) return; // Safety check
+            // Normalize course to be within 0-359 degrees
+            const normalizedCourse = (course % 360 + 360) % 360;
+            vessel.marker.updateDirection(normalizedCourse);
+        }
+
+        function createPopupContent(vesselData) {
+            const container = document.createElement('div');
+            const now = new Date();
+            const lastUpdate = new Date(vesselData.current_timestamp);
+            // Calculate time difference in minutes, ensuring it's non-negative
+            const timeDiffMinutes = Math.max(0, Math.floor((now - lastUpdate) / 60000));
+
+            const hasApiPrediction = vesselData.predicted_latitude !== null && vesselData.predicted_longitude !== null;
+            const isMoving = vesselData.sog !== null && parseFloat(vesselData.sog) >= MIN_SPEED_MOVING_KNOTS;
+            // Can we calculate a prediction (moving with known course)?
+            const canCalculatePrediction = isMoving && vesselData.cog !== null;
+            // Should we show the prediction section in the popup?
+            const showPredictionSection = hasApiPrediction || canCalculatePrediction;
+
+            let predictionDetails = { time: '', made: '', source: '' };
+            if (showPredictionSection) {
+                 predictionDetails = formatPredictionInfo(vesselData, hasApiPrediction, now);
+            }
+
+            // Prepare data for the popup template
+            const popupData = {
+                id: vesselData.vessel_id,
+                statusBadge: createStatusBadge(isMoving),
+                lat: formatCoordinate(vesselData.current_latitude),
+                lon: formatCoordinate(vesselData.current_longitude),
+                flag: vesselData.country || 'Unknown',
+                type: vesselData.vessel_type && vesselData.vessel_type !== 'Unknown' ? vesselData.vessel_type : null,
+                speed: formatSpeed(vesselData.sog),
+                course: formatCourse(vesselData.cog),
+                heading: formatHeading(vesselData.heading),
+                accuracy: formatAccuracy(vesselData.pos_acc),
+                lastUpdate: `${timeDiffMinutes} min ago`,
+                showPrediction: showPredictionSection,
+                // Show coordinates for API prediction, text for calculated
+                predictedPos: hasApiPrediction 
+                    ? `${formatCoordinate(vesselData.predicted_latitude)}, ${formatCoordinate(vesselData.predicted_longitude)}` 
+                    : (canCalculatePrediction ? 'Calculated path' : 'N/A'),
+                predTime: predictionDetails.time,
+                predSource: predictionDetails.source,
+                predMade: predictionDetails.made
+            };
+
+            // Use template literal for cleaner HTML structure
+            container.innerHTML = `
+                <div class="popup-header">
+                    <i class="fas fa-ship"></i> 
+                    <span>Vessel ${popupData.id}</span>
+                    ${popupData.statusBadge}
+                </div>
+                <div class="popup-section">
+                    ${createPopupRow('Position:', `${popupData.lat}, ${popupData.lon}`)}
+                    ${createPopupRow('Flag:', popupData.flag)}
+                    ${popupData.type ? createPopupRow('Type:', popupData.type) : ''}
+                    ${createPopupRow('Speed:', popupData.speed)}
+                    ${createPopupRow('Course:', popupData.course)}
+                    ${createPopupRow('Heading:', popupData.heading)}
+                    ${createPopupRow('Accuracy:', popupData.accuracy)}
+                    ${createPopupRow('Last Update:', popupData.lastUpdate)}
+                    </div>
+                ${popupData.showPrediction ? `
+                    <div class="popup-prediction">
+                        <div><i class="fas fa-route"></i> <strong>Prediction (${PREDICTION_HOURS_AHEAD * 60} min)</strong></div>
+                        ${createPopupRow('Predicted Position:', popupData.predictedPos)}
+                        <div class="prediction-info">
+                            ${popupData.predTime ? `<div>Prediction for: ${popupData.predTime}</div>` : ''}
+                            ${popupData.predSource ? `<div>Source: ${popupData.predSource}</div>` : ''}
+                            ${popupData.predMade ? `<div>Made: ${popupData.predMade}</div>` : ''}
+                        </div>
+                    </div>
+                ` : ''}
+            `;
+            return container;
+        }
+
+        // --- Popup Content Helpers ---
+        function createPopupRow(label, value) {
+             // Generates a consistent data row HTML string
+             return `<div class="data-row"><span class="data-label">${label}</span><span class="data-value">${value}</span></div>`;
+        }
+
+        function createStatusBadge(isMoving) {
+            const className = isMoving ? 'status-moving' : 'status-stationary';
+            const text = isMoving ? 'Moving' : 'Stationary';
+            return `<span class="status-badge ${className}">${text}</span>`;
+        }
+
+        function formatCoordinate(coord) {
+            // Format geographic coordinates to 6 decimal places
+            return typeof coord === 'number' ? coord.toFixed(6) : 'N/A';
+        }
+        
+        function formatSpeed(sog) {
+            // Format speed over ground (knots)
+            return sog !== null && sog !== undefined ? `${parseFloat(sog).toFixed(1)} knots` : '0.0 knots';
+        }
+
+        function formatCourse(cog) {
+             // Format course over ground (degrees)
+             return cog !== null && cog !== undefined ? `${parseFloat(cog).toFixed(1)}°` : '0.0°';
+        }
+        
+        function formatHeading(heading) {
+            // Format vessel heading (degrees)
+            return heading !== null && heading !== undefined ? `${parseFloat(heading).toFixed(1)}°` : 'N/A';
+        }
+
+        function formatAccuracy(posAcc) {
+             // Format position accuracy indicator (High/Low/Standard)
+             const text = posAcc === true ? 'High' : (posAcc === false ? 'Low' : 'Standard');
+             const iconClass = posAcc === true ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle';
+             const iconColor = posAcc === true ? 'var(--success)' : 'var(--warning)';
+             // Only show icon if accuracy is explicitly High or Low
+             const icon = posAcc === undefined || posAcc === null ? '' : `<i class="${iconClass}" style="color: ${iconColor};"></i>`;
+             return `${icon} ${text}`.trim();
+        }
+
+        function formatPredictionInfo(vesselData, hasApiPrediction, now) {
+            // Formats details for the prediction section of the popup
+            let time = '', made = '', source = 'Calculated (dead reckoning)';
+            
+            if (hasApiPrediction && vesselData.prediction_for_timestamp) {
+                // Use details from API prediction
+                source = 'AI Prediction Model';
+                time = formatDateTime(new Date(vesselData.prediction_for_timestamp));
+                if (vesselData.prediction_made_at) {
+                    const predMadeTime = new Date(vesselData.prediction_made_at);
+                    const predMadeAgoMinutes = Math.max(0, Math.floor((now - predMadeTime) / 60000));
+                    made = `${predMadeAgoMinutes} min ago`;
+                }
+            } else {
+                 // Calculate details for dead reckoning prediction
+                const predTime = new Date(now.getTime() + PREDICTION_HOURS_AHEAD * 3600 * 1000);
+                time = formatDateTime(predTime);
+                made = 'just now'; // Calculated predictions are effectively made 'now'
+            }
+            return { time, made, source };
+        }
+
+        function formatDateTime(date) {
+            // Formats a date object into a readable string
+            if (!date || !(date instanceof Date)) return '';
+            try {
+                return date.toLocaleString('en-US', {
+                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+            } catch (e) {
+                 console.error("Error formatting date:", date, e);
+                 return 'Invalid Date';
+            }
+        }
+        
+        // --- Navigation Calculations ---
+        function calculatePredictionPosition(lat, lon, cog, sog, hoursAhead = PREDICTION_HOURS_AHEAD) {
+            // Basic validation of inputs
+            if (!isValidNumber(lat) || !isValidNumber(lon) || !isValidNumber(cog) || !isValidNumber(sog) || sog < MIN_SPEED_MOVING_KNOTS) {
+                return null;
+            }
+            
+            const latRad = degreesToRadians(lat);
+            const lonRad = degreesToRadians(lon);
+            const cogRad = degreesToRadians(((cog % 360) + 360) % 360); // Normalize COG
+            
+            const distNM = sog * hoursAhead;
+            // Add a slightly more generous upper bound for sanity check, e.g., 1.5 * max speed * time
+            if (distNM <= 0 || distNM > (MAX_VALID_SPEED_KNOTS * 1.5 * hoursAhead)) return null; 
+
+            const earthRadiusNM = 3440.065; // Earth radius in nautical miles
+            const angDist = distNM / earthRadiusNM;
+            
+            // Calculate new latitude using spherical law of cosines
+            const newLatRad = Math.asin(
+                Math.sin(latRad) * Math.cos(angDist) +
+                Math.cos(latRad) * Math.sin(angDist) * Math.cos(cogRad)
+            );
+            
+            // Calculate new longitude
+            let newLonRad = lonRad + Math.atan2(
+                Math.sin(cogRad) * Math.sin(angDist) * Math.cos(latRad),
+                Math.cos(angDist) - Math.sin(latRad) * Math.sin(newLatRad)
+            );
+            
+            // Normalize longitude to range -PI to PI
+            newLonRad = ((newLonRad + 3 * Math.PI) % (2 * Math.PI)) - Math.PI; 
+            
+            // Convert back to degrees
+            return [
+                radiansToDegrees(newLatRad),
+                radiansToDegrees(newLonRad)
+            ];
+        }
+        
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            // Calculates distance between two points using Haversine formula
+            if (!isValidNumber(lat1) || !isValidNumber(lon1) || !isValidNumber(lat2) || !isValidNumber(lon2)) return 0;
+            
+            const R = 3440.065; // Earth radius in NM
+            const dLat = degreesToRadians(lat2 - lat1);
+            const dLon = degreesToRadians(lon2 - lon1);
+            const lat1Rad = degreesToRadians(lat1);
+            const lat2Rad = degreesToRadians(lat2);
+            
+            const a = Math.sin(dLat/2)**2 + Math.cos(lat1Rad) * Math.cos(lat2Rad) * Math.sin(dLon/2)**2;
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c; // Distance in nautical miles
+        }
+
+        function degreesToRadians(degrees) {
+            return degrees * Math.PI / 180;
+        }
+
+        function radiansToDegrees(radians) {
+            // Convert radians to degrees and fix to 6 decimal places
+            return parseFloat((radians * 180 / Math.PI).toFixed(6));
+        }
+
+        // --- Validation Helpers ---
+        function isValidNumber(value) {
+            // Checks if a value is a valid, non-NaN number
+            return typeof value === 'number' && !isNaN(value);
+        }
+
+        function isValidCoordinatePair(pos) {
+            // Checks if an array is a valid [lat, lon] pair
+            return Array.isArray(pos) && pos.length === 2 && 
+                   isValidNumber(pos[0]) && isValidNumber(pos[1]) &&
+                   pos[0] >= -90 && pos[0] <= 90 && // Latitude check
+                   pos[1] >= -180 && pos[1] <= 180; // Longitude check
+        }
+
+        function isWithinBounds(lat, lon, bounds) {
+            // Checks if coordinates are within specified geographical bounds
+            return lat >= bounds.minLat && lat <= bounds.maxLat && 
+                   lon >= bounds.minLon && lon <= bounds.maxLon;
+        }
+
+        function isValidPrediction(currentPos, predictedPos) {
+            // Validates a prediction based on position validity, distance, and bounds
+            if (!isValidCoordinatePair(currentPos) || !isValidCoordinatePair(predictedPos)) return false;
+
+            // Check distance - prediction shouldn't be too far
+            const distanceNM = calculateDistance(currentPos[0], currentPos[1], predictedPos[0], predictedPos[1]);
+            if (distanceNM > MAX_PREDICTION_DISTANCE_NM) {
+                console.warn(`Prediction distance too large: ${distanceNM.toFixed(2)} NM`);
+                return false;
+            }
+            
+            // Check geographical bounds (e.g., Baltic Sea)
+            if (!isWithinBounds(predictedPos[0], predictedPos[1], BALTIC_SEA_BOUNDS)) {
+                console.warn(`Prediction outside required bounds: Lat ${predictedPos[0]}, Lon ${predictedPos[1]}`);
+                return false;
+            }
+            return true;
+        }
+
+        function validateVesselMovement(oldPos, newPos, timeElapsedSeconds) {
+            // Validates if movement between two points is realistic given the time elapsed
+            if (!isValidCoordinatePair(oldPos) || !isValidCoordinatePair(newPos) || !timeElapsedSeconds || timeElapsedSeconds <= 0) {
+                return true; // Cannot validate, assume valid to avoid discarding data unnecessarily
+            }
+            
+            const distanceNM = calculateDistance(oldPos[0], oldPos[1], newPos[0], newPos[1]);
+            // Avoid division by zero or tiny time intervals
+            if (timeElapsedSeconds < 1) return true; 
+            
+            const timeElapsedHours = timeElapsedSeconds / 3600;
+            const impliedSpeed = distanceNM / timeElapsedHours;
+            
+            // Check if speed exceeds a reasonable maximum
+            if (impliedSpeed > MAX_VALID_SPEED_KNOTS) {
+                console.warn(`Unrealistic movement detected: ${impliedSpeed.toFixed(1)} knots (${distanceNM.toFixed(2)} nm / ${timeElapsedHours.toFixed(2)} hrs)`);
+                return false; // Movement is likely erroneous
+            }
+            return true; // Movement seems realistic
+        }
+
+        // --- Vessel Data Processing Logic ---
+        async function fetchAndDisplayVessels() {
+            try {
+                const vesselData = await fetchVesselData();
+                const currentTime = new Date();
+                // Calculate time since last successful update
+                const timeSinceLastUpdate = lastUpdateTimestamp ? (currentTime - lastUpdateTimestamp) / 1000 : 0;
+                lastUpdateTimestamp = currentTime;
+                countdown = COUNTDOWN_SECONDS; // Reset refresh countdown
+
+                // Process the fetched data
+                const { processedVesselIds, apiPredictionCount } = processVesselData(vesselData, timeSinceLastUpdate);
+                
+                // Remove vessels from the map that are no longer in the dataset
+                removeStaleVessels(processedVesselIds);
+                
+                // Update UI elements (stats, filter counts, status)
+                updateUIComponents(apiPredictionCount);
+                
+                // Ensure loading animation completes
+                updateLoadingProgress(100);
+                
+            } catch (error) {
+                console.error("Error fetching or processing vessel data:", error);
+                // Indicate error in the loading UI
+                updateLoadingProgress(-1); 
+                // Consider adding more robust error handling like user notifications or retry delays
+            }
+        }
+
+        async function fetchVesselData() {
+             // Fetches vessel data from the API endpoint
+             // TODO: Add proper error handling for network issues (e.g., using try-catch around fetch)
+             const response = await fetch('/vessels?limit=1000'); // Consider making limit configurable
+             if (!response.ok) {
+                 // Throw an error with status details for better debugging
+                 throw new Error(`API Error: ${response.status} ${response.statusText}`);
+             }
+             return await response.json();
+        }
+
+        function processVesselData(vesselDataArray, timeSinceLastUpdate) {
+            // Processes the raw vessel data array from the API
+            let apiPredictionCount = 0;
+            const processedVesselIds = new Set(); // Keep track of vessels processed in this batch
+
+            if (!Array.isArray(vesselDataArray)) {
+                 console.error("Received non-array data from API");
+                 return { processedVesselIds, apiPredictionCount }; // Return empty set and zero count
+            }
+
+            vesselDataArray.forEach(data => {
+                    const vesselId = data.vessel_id;
+                // Basic validation: ID and valid coordinates are required
+                if (!vesselId || !isValidNumber(data.current_latitude) || !isValidNumber(data.current_longitude)) {
+                    console.warn(`Skipping vessel ${vesselId || 'Unknown ID'}: Invalid basic data`, data);
+                    return; // Skip this record
+                }
+                
+                processedVesselIds.add(vesselId);
+                    const currentPos = [data.current_latitude, data.current_longitude];
+                
+                // Determine Course: Prefer heading, fallback to COG, default to 0
+                const courseAngle = isValidNumber(data.heading) ? data.heading : 
+                                   (isValidNumber(data.cog) ? data.cog : 0);
+
+                // Determine Prediction: Check API prediction first, then try calculating
+                let { predictedPos, isApiPrediction } = determinePrediction(data, currentPos);
+                
+                // Increment count only for valid API predictions
+                if (predictedPos && isApiPrediction) {
+                    apiPredictionCount++;
+                }
+
+                // Create or Update Vessel object and its map representation
+                if (!vessels.has(vesselId)) {
+                    createNewVessel(vesselId, data, currentPos, courseAngle, predictedPos, isApiPrediction);
+                    } else {
+                    updateExistingVessel(vessels.get(vesselId), data, currentPos, courseAngle, 
+                                        predictedPos, timeSinceLastUpdate, isApiPrediction);
+                }
+            });
+
+            return { processedVesselIds, apiPredictionCount };
+        }
+        
+        function determinePrediction(data, currentPos) {
+            // Determines the prediction position and its source (API or calculated)
+            let predictedPos = null;
+            let isApiPrediction = false;
+
+            // 1. Check for a valid API prediction
+            if (isValidNumber(data.predicted_latitude) && isValidNumber(data.predicted_longitude)) {
+                 const apiPredPos = [data.predicted_latitude, data.predicted_longitude];
+                 // Validate the API prediction (distance, bounds)
+                 if (isValidPrediction(currentPos, apiPredPos)) {
+                     predictedPos = apiPredPos;
+                     isApiPrediction = true;
+                 } else {
+                      console.warn(`Invalid API prediction received for ${data.vessel_id}`, apiPredPos);
+                      // Discard invalid API prediction
+                 }
+            }
+            
+            // 2. If no valid API prediction, try calculating dead reckoning if vessel is moving
+            if (!predictedPos && isValidNumber(data.cog) && isValidNumber(data.sog) && data.sog >= MIN_SPEED_MOVING_KNOTS) {
+                 const calculatedPred = calculatePredictionPosition(
+                     currentPos[0], currentPos[1], data.cog, data.sog, PREDICTION_HOURS_AHEAD
+                 );
+                 // Validate the calculated prediction
+                 if (calculatedPred && isValidPrediction(currentPos, calculatedPred)) {
+                     predictedPos = calculatedPred;
+                 } else {
+                     // Log if calculation failed or result was invalid
+                     if(calculatedPred) console.warn(`Invalid calculated prediction for ${data.vessel_id}`, calculatedPred);
+                 }
+            }
+            
+            // Return the determined position (or null) and whether it came from the API
+            return { predictedPos, isApiPrediction };
+        }
+
+        function createNewVessel(vesselId, data, currentPos, courseAngle, predictedPos, isApiPrediction) {
+            // Creates a new vessel object and its marker
+            const marker = createVesselMarker(currentPos, false, courseAngle);
+            addLayer(marker); // Add marker to map
+
+            const vessel = {
+                marker: marker,
+                lastPosition: currentPos, // Store initial position
+                speed: data.sog ?? 0, // Default speed to 0 if null/undefined
+                timestamp: data.current_timestamp,
+                data: data, // Keep raw data for popup generation
+                            predictionLine: null,
+                            predictionMarker: null,
+                hasPrediction: !!predictedPos, // Does it have *any* valid prediction (API or calculated)?
+                hasApiPrediction: isApiPrediction // Specifically, does it have an API prediction?
+            };
+            vessels.set(vesselId, vessel); // Add to our global map of vessels
+
+            // Setup popup - content generated lazily on click
+            marker.bindPopup(() => createPopupContent(vessel.data), { 
+                minWidth: 280, maxWidth: 320, autoPan: true, closeButton: true
+            });
+            
+            // Set initial visual state (moving indicator, prediction line/marker)
+            updateMovingIndicator(vessel);
+                        updatePredictionVisuals(vessel, currentPos, predictedPos);
+            
+            return vessel;
+        }
+
+        function updateExistingVessel(vessel, data, currentPos, courseAngle, predictedPos, timeSinceLastUpdate, isApiPrediction) {
+            // Updates an existing vessel object and its marker
+            const oldLatLng = vessel.marker.getLatLng();
+            const prevPos = [oldLatLng.lat, oldLatLng.lng];
+            
+            // Validate the movement since the last update
+            const movementIsValid = validateVesselMovement(prevPos, currentPos, timeSinceLastUpdate);
+            
+            // Update position and direction only if movement is valid
+            if (movementIsValid) {
+                        vessel.marker.setLatLng(currentPos);
+                updateVesselDirection(vessel, courseAngle);
+                vessel.lastPosition = currentPos; // Update the stored last valid position
+            } else {
+                console.warn(`Ignoring unrealistic position update for vessel ${data.vessel_id}. Keeping previous position.`);
+                // If movement is invalid, use the *last known valid position* for prediction visuals
+                currentPos = vessel.lastPosition; 
+            }
+            
+            // Update vessel state data regardless of movement validation
+            vessel.speed = data.sog ?? 0;
+            vessel.timestamp = data.current_timestamp;
+            vessel.data = data; // Store the latest raw data
+            vessel.hasPrediction = !!predictedPos; // Update based on latest prediction attempt
+            vessel.hasApiPrediction = isApiPrediction;
+            
+            // Update visual elements based on new state
+            updateMovingIndicator(vessel);
+            updatePredictionVisuals(vessel, currentPos, predictedPos); // Use potentially corrected currentPos
+            
+            // If popup is open, refresh its content with the latest data
+            if (vessel.marker.isPopupOpen()) {
+                vessel.marker.setPopupContent(createPopupContent(vessel.data)); 
+            }
+        }
+
+        function updateMovingIndicator(vessel) {
+             // Adds or removes the 'moving-vessel' class for pulse animation
+             const element = vessel.marker.getElement();
+             if (element) {
+                 const isMoving = vessel.speed >= MIN_SPEED_MOVING_KNOTS;
+                 // Use toggle with force boolean for efficiency
+                 element.classList.toggle('moving-vessel', isMoving);
+             }
+        }
+
+        function updatePredictionVisuals(vessel, displayPos, predictedPos) {
+             // Updates the prediction line and marker for a vessel
+             // displayPos is the position the line should start from (usually vessel.lastPosition)
+             
+             // Always clear existing prediction visuals first
+             removeLayer(vessel.predictionLine);
+             removeLayer(vessel.predictionMarker);
+             vessel.predictionLine = null;
+             vessel.predictionMarker = null;
+
+             // Add new visuals only if a valid prediction exists and display is enabled
+             if (predictedPos && showPredictionLines) { 
+                 const predictionColor = getComputedStyle(document.documentElement).getPropertyValue('--prediction-color').trim();
+                
+                 // Create and add the dashed line
+                 vessel.predictionLine = L.polyline([displayPos, predictedPos], { 
+                     color: predictionColor, dashArray: '5,5', weight: 2, opacity: 0.7 
+                 });
+                 addLayer(vessel.predictionLine);
+
+                 // Create and add the prediction end marker
+                 vessel.predictionMarker = createVesselMarker(predictedPos, true); // isPrediction = true
+                 addLayer(vessel.predictionMarker);
+                 vessel.predictionMarker.bindTooltip(`${PREDICTION_HOURS_AHEAD * 60} min ahead`, { 
+                     direction: 'top', permanent: false 
+                 });
+
+                 // Setup hover effects (ensure listeners are managed properly)
+                 vessel.marker.off('mouseover').on('mouseover', () => { 
+                     vessel.predictionLine?.setStyle({ opacity: 1, weight: 3 });
+                     vessel.predictionMarker?.setStyle({ radius: 8 }); // Increase size on hover
+                 });
+                 vessel.marker.off('mouseout').on('mouseout', () => {
+                     vessel.predictionLine?.setStyle({ opacity: 0.7, weight: 2 });
+                     vessel.predictionMarker?.setStyle({ radius: 6 }); // Return to normal size
+                 });
+             }
+        }
+
+        function removeStaleVessels(currentVesselIds) {
+            // Removes vessels from the map and internal state if they weren't in the latest API update
+            vessels.forEach((vessel, id) => {
+                if (!currentVesselIds.has(id)) {
+                    // Remove all associated map layers
+                    removeLayer(vessel.marker);
+                    removeLayer(vessel.predictionLine);
+                    removeLayer(vessel.predictionMarker);
+                    // Remove from the vessels map
+                        vessels.delete(id);
+                    console.log(`Removed stale vessel: ${id}`);
+                }
+            });
+        }
+
+        function updateUIComponents(apiPredictionCount) {
+            // Central function to update various UI elements after data processing
+            
+            // 1. Update Header Stats
+            const vesselCountEl = document.getElementById('vessel-count');
+            const predictionCountEl = document.getElementById('prediction-count');
+            if (vesselCountEl) vesselCountEl.textContent = vessels.size;
+            if (predictionCountEl) predictionCountEl.textContent = apiPredictionCount;
+            
+            // 2. Update System Status in Control Panel
+            updatePredictionStatus(apiPredictionCount);
+
+            // 3. Update Filter Counts
+            updateFilterCounts();
+            
+            // 4. Re-apply the currently active filter to reflect updated vessel states
+            applyVesselFilter(); 
+
+            // 5. Update Time Displays in Footer
+            updateTimeDisplays();
+        }
+
+        function updateFilterCounts() {
+             // Calculates and updates the counts displayed on filter buttons
+             const allCount = vessels.size;
+             let movingCount = 0;
+             let stationaryCount = 0;
+             let predictableCount = 0; // Count vessels with API predictions
+
+             vessels.forEach(v => {
+                 if (v.speed >= MIN_SPEED_MOVING_KNOTS) {
+                     movingCount++;
+                 } else {
+                     stationaryCount++;
+                 }
+                 // Predictable filter specifically counts vessels with *API* predictions
+                 if (v.hasApiPrediction) { 
+                     predictableCount++;
+                 }
+             });
+
+             // Update text content of filter buttons
+             document.getElementById('filter-all').textContent = `All Vessels (${allCount})`;
+             document.getElementById('filter-moving').textContent = `Moving (${movingCount})`;
+             document.getElementById('filter-stationary').textContent = `Stationary (${stationaryCount})`;
+             document.getElementById('filter-predictable').textContent = `Predictable (${predictableCount})`;
+        }
+        
+        function applyVesselFilter() {
+            // Shows/hides vessels based on the currently active filter
+            vessels.forEach((vessel, id) => {
+                let shouldShow = false;
+                switch (activeFilter) {
+                    case 'all':
+                        shouldShow = true;
+                        break;
+                    case 'moving':
+                        shouldShow = vessel.speed >= MIN_SPEED_MOVING_KNOTS;
+                        break;
+                    case 'stationary':
+                        shouldShow = vessel.speed < MIN_SPEED_MOVING_KNOTS;
+                        break;
+                    case 'predictable':
+                        // Filter based on having a valid API prediction
+                        shouldShow = vessel.hasApiPrediction;
+                        break;
+                    default: // Should not happen, but default to showing all
+                         shouldShow = true;
+                }
+                
+                // Toggle visibility of the main marker
+                toggleLayerVisibility(vessel.marker, shouldShow);
+                // Toggle prediction visuals only if the main marker should be shown and predictions are enabled
+                toggleLayerVisibility(vessel.predictionLine, shouldShow && showPredictionLines);
+                toggleLayerVisibility(vessel.predictionMarker, shouldShow && showPredictionLines);
+            });
+        }
+        
+        // --- Map Layer Helpers ---
+        function addLayer(layer) {
+            // Safely adds a layer to the map if it's not already present
+            if (layer && !map.hasLayer(layer)) {
+                layer.addTo(map);
+            }
+        }
+
+        function removeLayer(layer) {
+            // Safely removes a layer from the map if it exists
+            if (layer && map.hasLayer(layer)) {
+                map.removeLayer(layer);
+            }
+        }
+
+        function toggleLayerVisibility(layer, shouldShow) {
+             // Convenience function to add or remove a layer based on a boolean
+             if (shouldShow) {
+                 addLayer(layer);
+             } else {
+                 removeLayer(layer);
+             }
+        }
+
+    </script>
+</body>
+</html>
