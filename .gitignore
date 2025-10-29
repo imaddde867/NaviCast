@@ -19,6 +19,7 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+/.venv/
 
 # Logs
 *.log
@@ -79,3 +80,4 @@ adjust_retention.sh
 *_deployment.md
 deployment_*.txt
 bucket_policy.json
+.venv/
