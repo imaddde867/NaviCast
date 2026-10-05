@@ -63,6 +63,8 @@ build.sh
 # Data files (can be regenerated)
 *.csv.gz
 raw_ais_data.json
+*.mp4
+natural_earth_data*/
 
 # Jupyter Notebook
 .ipynb_checkpoints/

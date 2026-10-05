@@ -5,13 +5,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 from logging.handlers import RotatingFileHandler
+import os
 import pandas as pd
 import json
 from typing import Any, Dict, List, Mapping, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi.responses import JSONResponse
 import uvicorn
-from config import ensure_log_dir, get_db_config
+from config import BOUNDS, ensure_log_dir, get_db_config
 
 # Create logs directory if it doesn't exist
 LOG_DIR = ensure_log_dir()
@@ -81,14 +82,6 @@ SHIP_TYPE_MAP = {
     99: "Other"
 }
 
-# Valid boundaries for the Baltic Sea region
-BOUNDS = {
-    "lat_min": 50.0,
-    "lat_max": 70.0,
-    "lon_min": 10.0,
-    "lon_max": 30.0
-}
-
 app = FastAPI(
     title="NAVICAST API",
     description="API for the NAVICAST vessel tracking and prediction system",
@@ -96,9 +89,10 @@ app = FastAPI(
 )
 
 # Enable CORS for the frontend
+_cors_origins = [o.strip() for o in os.getenv("NAVICAST_CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -117,11 +111,11 @@ def get_db_connection():
     try:
         conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
         return conn
-    except Exception as e:
-        logger.error(f"Database connection error: {e}")
+    except Exception:
+        logger.exception("Database connection failed")
         raise HTTPException(
-            status_code=500, 
-            detail=f"Database connection failed: {str(e)}"
+            status_code=500,
+            detail="Internal server error"
         )
 
 def get_country_from_mmsi(mmsi: int) -> Optional[str]:
@@ -171,12 +165,15 @@ def _parse_iso_datetime(value: Optional[str], field_name: str) -> Optional[datet
     if value is None:
         return None
     try:
-        return datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(value)
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid {field_name} format. Use ISO format (YYYY-MM-DDTHH:MM:SS)"
         ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def _resolve_time_bounds(
@@ -192,8 +189,7 @@ def _resolve_time_bounds(
     elif start_time and not end_time:
         end_time = start_time + timedelta(hours=2)
     elif not start_time and not end_time:
-        end_time = datetime.now()
-        start_time = end_time - timedelta(hours=1)
+        return None, None
 
     return start_time, end_time
 
@@ -228,8 +224,14 @@ def _fetch_latest_vessels(
                     p.prediction_made_at
                 FROM 
                     raw_ais_data v
-                LEFT JOIN 
-                    predictions p ON v.vessel_id = p.vessel_id
+                LEFT JOIN LATERAL (
+                    SELECT predicted_latitude, predicted_longitude,
+                           prediction_for_timestamp, prediction_made_at
+                    FROM predictions
+                    WHERE vessel_id = v.vessel_id
+                    ORDER BY prediction_made_at DESC
+                    LIMIT 1
+                ) p ON true
                 WHERE 1=1
             """
 
@@ -336,7 +338,7 @@ def get_vessels(
     
     try:
         start_time, end_time = _resolve_time_bounds(from_time, to_time)
-        sanitized_limit = max(1, limit if limit is not None else 100)
+        sanitized_limit = min(1000, max(1, limit if limit is not None else 100))
         rows = _fetch_latest_vessels(mmsi, start_time, end_time, sanitized_limit)
         vessels = [_format_vessel_row(row) for row in rows]
 
@@ -349,69 +351,20 @@ def get_vessels(
         )
         return vessels
 
-    except Exception as e:
-        logger.error(f"Error retrieving vessel data: {e}")
-        raise HTTPException(status_code=500, detail=f"Error retrieving vessel data: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error retrieving vessel data")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/health")
 def health_check():
     """API health check endpoint"""
     return {
         "status": "healthy",
-        "time": datetime.now().isoformat(),
+        "time": datetime.now(timezone.utc).isoformat(),
         "version": app.version
     }
-
-@app.get("/vessels/{vessel_id}", response_model=Dict[str, Any])
-def get_vessel(vessel_id: int):
-    """Get detailed information about a specific vessel"""
-    conn = None
-    cur = None
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Query to get vessel details
-        query = """
-        SELECT 
-            a.vessel_id, 
-            a.latitude AS current_latitude, 
-            a.longitude AS current_longitude, 
-            a.timestamp AS current_timestamp,
-            COALESCE((a.raw_json -> 'properties' ->> 'sog')::float, 0.0) AS sog,
-            COALESCE((a.raw_json -> 'properties' ->> 'cog')::float, 0.0) AS cog,
-            COALESCE((a.raw_json -> 'properties' ->> 'posAcc')::boolean, false) AS pos_acc,
-            COALESCE((a.raw_json -> 'properties' ->> 'heading')::float, null) AS heading,
-            COALESCE((a.raw_json -> 'properties' ->> 'navStat')::int, null) AS nav_stat,
-            a.raw_json,
-            p.predicted_latitude, 
-            p.predicted_longitude, 
-            p.prediction_for_timestamp, 
-            p.prediction_made_at
-        FROM raw_ais_data a
-        LEFT JOIN predictions p ON a.vessel_id = p.vessel_id
-        WHERE a.vessel_id = %s
-        ORDER BY a.timestamp DESC
-        LIMIT 1
-        """
-        cur.execute(query, (vessel_id,))
-        vessel = cur.fetchone()
-        
-        if not vessel:
-            raise HTTPException(status_code=404, detail=f"Vessel with ID {vessel_id} not found")
-
-        return _format_vessel_row(vessel)
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in get_vessel: {e}")
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 @app.get("/vessels/download")
 def download_vessels(
@@ -465,12 +418,71 @@ def download_vessels(
         }
         return JSONResponse(content=vessels, headers=headers)
 
-if __name__ == "__main__":
-    # Mount static files for the web interface
+
+@app.get("/vessels/{vessel_id}", response_model=Dict[str, Any])
+def get_vessel(vessel_id: int):
+    """Get detailed information about a specific vessel"""
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Query to get vessel details
+        query = """
+        SELECT 
+            a.vessel_id, 
+            a.latitude AS current_latitude, 
+            a.longitude AS current_longitude, 
+            a.timestamp AS current_timestamp,
+            COALESCE((a.raw_json -> 'properties' ->> 'sog')::float, 0.0) AS sog,
+            COALESCE((a.raw_json -> 'properties' ->> 'cog')::float, 0.0) AS cog,
+            COALESCE((a.raw_json -> 'properties' ->> 'posAcc')::boolean, false) AS pos_acc,
+            COALESCE((a.raw_json -> 'properties' ->> 'heading')::float, null) AS heading,
+            COALESCE((a.raw_json -> 'properties' ->> 'navStat')::int, null) AS nav_stat,
+            a.raw_json,
+            p.predicted_latitude, 
+            p.predicted_longitude, 
+            p.prediction_for_timestamp, 
+            p.prediction_made_at
+        FROM raw_ais_data a
+        LEFT JOIN LATERAL (
+            SELECT predicted_latitude, predicted_longitude,
+                   prediction_for_timestamp, prediction_made_at
+            FROM predictions
+            WHERE vessel_id = a.vessel_id
+            ORDER BY prediction_made_at DESC
+            LIMIT 1
+        ) p ON true
+        WHERE a.vessel_id = %s
+        ORDER BY a.timestamp DESC
+        LIMIT 1
+        """
+        cur.execute(query, (vessel_id,))
+        vessel = cur.fetchone()
+        
+        if not vessel:
+            raise HTTPException(status_code=404, detail=f"Vessel with ID {vessel_id} not found")
+
+        return _format_vessel_row(vessel)
+        
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error in get_vessel")
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+# Serve the web interface (after API routes so the "/" mount does not shadow them)
+if os.path.isdir("static"):
     app.mount("/", StaticFiles(directory="static", html=True), name="static")
-    
-    # Use default port, remove Render.com reference
-    port = 8000
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", "8000"))
     
     logger.info(f"Starting API server on 0.0.0.0:{port} (v{app.version})")
     uvicorn.run(app, host="0.0.0.0", port=port)

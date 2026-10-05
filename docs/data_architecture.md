@@ -51,13 +51,14 @@ This document describes the data architecture of the NAVICAST system, detailing 
   - `nav_stat` (INTEGER): Navigation status code
   - `pos_acc` (BOOLEAN): Position accuracy indicator
 
-`predictions` table:
-- `id` (SERIAL, PRIMARY KEY): Unique identifier
-- `vessel_id` (INTEGER): References raw_ais_data(vessel_id)
+`predictions` table (one row per vessel — latest prediction wins):
+- `vessel_id` (INTEGER, PRIMARY KEY): References raw_ais_data(vessel_id)
 - `predicted_latitude` (DOUBLE PRECISION): Predicted latitude
 - `predicted_longitude` (DOUBLE PRECISION): Predicted longitude
 - `prediction_for_timestamp` (TIMESTAMP): Time for which prediction is made
 - `prediction_made_at` (TIMESTAMP): Time when prediction was calculated
+- `UNIQUE (vessel_id, prediction_for_timestamp)`: secondary uniqueness guard. The upsert conflict target is `(vessel_id)` (`ON CONFLICT (vessel_id) DO UPDATE` in `prediction_service.py`) — a new prediction for a vessel replaces the old one.
+- Prediction TTL is 1 hour: rows with `prediction_made_at` older than 1 hour are deleted (`PREDICTION_TTL_HOURS = 1` cleanup in `prediction_service.py`).
 
 ### 3. Data Processing
 
@@ -105,7 +106,7 @@ This document describes the data architecture of the NAVICAST system, detailing 
 - Displays vessels on interactive map using Leaflet.js
 - Shows vessel information in popup panels
 - Visualizes predicted trajectories with dotted lines
-- Updates in real-time (10-second refresh interval)
+- Polls on a fixed interval; a vessel counts as stale when its AIS timestamp is older than the staleness threshold, and failed polls back off exponentially with a visible error
 - Provides user controls for display options (theme switching, prediction toggling)
 
 **Visualization Flow**:
@@ -118,7 +119,7 @@ This document describes the data architecture of the NAVICAST system, detailing 
 ## Data Retention and Management
 
 - **Raw AIS Data**: Stored for 24 hours by default (configurable)
-- **Predictions**: Stored until superseded by newer predictions
+- **Predictions**: Stored until superseded by newer predictions or TTL-expired (1 hour)
 - **Data Cleanup**: Automated process removes old data
 - **Backup**: Regular database backups recommended
 

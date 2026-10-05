@@ -8,9 +8,9 @@ import time
 import schedule
 import os
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple, Optional, Any
-from config import ensure_log_dir, get_db_config
+from config import BOUNDS, ensure_log_dir, get_db_config
 
 # Create logs directory if it doesn't exist
 LOG_DIR = ensure_log_dir()
@@ -28,16 +28,16 @@ logger = logging.getLogger(__name__)
 
 # Constants
 MODEL_PATH = Path(os.getenv("NAVICAST_MODEL_PATH", "vessel_prediction_model.pkl"))
-PREDICTION_INTERVAL = 1800  # 30 minutes in seconds
+# One named constant per schedule concept (values identical to previous behavior)
+PREDICTION_HORIZON_SECONDS = 1800  # model time_diff + prediction_for offset
+PREDICTION_CADENCE_MINUTES = 5  # scheduler cadence
+AIS_RECENCY_MINUTES = 30  # query window for recent AIS rows
+PREDICTION_TTL_HOURS = 1  # cleanup threshold for stale predictions
+
+model = None
 
 # Database configuration
 DB_CONFIG = get_db_config()
-
-# Baltic Sea boundaries (for validation)
-LAT_MIN = 53
-LAT_MAX = 66
-LON_MIN = 9
-LON_MAX = 30
 
 # Load prediction model
 def load_model():
@@ -101,11 +101,11 @@ def make_predictions():
         WHERE (vessel_id, timestamp) IN (
             SELECT vessel_id, MAX(timestamp)
             FROM raw_ais_data
-            WHERE timestamp > NOW() - INTERVAL '30 minutes'
+            WHERE timestamp > NOW() - (%s * INTERVAL '1 minute')
             GROUP BY vessel_id
         )
         """
-        cur.execute(query)
+        cur.execute(query, (AIS_RECENCY_MINUTES,))
         latest_data = cur.fetchall()
 
         if not latest_data:
@@ -145,7 +145,7 @@ def make_predictions():
                     'sog': [sog_val],
                     'cog': [cog_val],
                     'heading': [heading_val],
-                    'time_diff': [PREDICTION_INTERVAL]
+                    'time_diff': [PREDICTION_HORIZON_SECONDS]
                 })
                 
                 # Try to use the model for prediction
@@ -155,12 +155,12 @@ def make_predictions():
                         logger.debug(f"Model prediction for vessel {vessel_id}: delta_lat={delta_lat:.6f}, delta_lon={delta_lon:.6f}")
                     else:
                         # Use dead reckoning if model is not available
-                        delta_lat, delta_lon = calculate_position_prediction(lat, lon, sog_val, cog_val, PREDICTION_INTERVAL)
+                        delta_lat, delta_lon = calculate_position_prediction(lat, lon, sog_val, cog_val, PREDICTION_HORIZON_SECONDS)
                         logger.debug(f"Dead reckoning for vessel {vessel_id}: delta_lat={delta_lat:.6f}, delta_lon={delta_lon:.6f}")
                 except Exception as e:
                     logger.warning(f"Model prediction failed for vessel {vessel_id}: {e}")
                     # Fallback to dead reckoning
-                    delta_lat, delta_lon = calculate_position_prediction(lat, lon, sog_val, cog_val, PREDICTION_INTERVAL)
+                    delta_lat, delta_lon = calculate_position_prediction(lat, lon, sog_val, cog_val, PREDICTION_HORIZON_SECONDS)
                     logger.debug(f"Fallback prediction for vessel {vessel_id}: delta_lat={delta_lat:.6f}, delta_lon={delta_lon:.6f}")
 
                 # Calculate predicted position
@@ -169,16 +169,16 @@ def make_predictions():
 
                 # Validate prediction is within reasonable bounds
                 if (abs(delta_lat) > 0.5 or abs(delta_lon) > 0.5 or  # Maximum ~30nm in 30 minutes
-                    predicted_lat < LAT_MIN or predicted_lat > LAT_MAX or
-                    predicted_lon < LON_MIN or predicted_lon > LON_MAX):
+                    predicted_lat < BOUNDS["lat_min"] or predicted_lat > BOUNDS["lat_max"] or
+                    predicted_lon < BOUNDS["lon_min"] or predicted_lon > BOUNDS["lon_max"]):
                     logger.warning(f"Invalid prediction for vessel {vessel_id}: "
                                 f"predicted_lat={predicted_lat:.4f}, predicted_lon={predicted_lon:.4f}")
                     skipped_count += 1
                     continue
 
                 # Calculate timestamps
-                prediction_for = timestamp + timedelta(seconds=PREDICTION_INTERVAL)
-                prediction_made = datetime.now()
+                prediction_for = timestamp + timedelta(seconds=PREDICTION_HORIZON_SECONDS)
+                prediction_made = datetime.now(timezone.utc)
 
                 # Store the prediction
                 cur.execute("""
@@ -196,16 +196,15 @@ def make_predictions():
                 
             except Exception as e:
                 logger.error(f"Error processing prediction for vessel {vessel_id}: {e}")
-                if conn:
-                    conn.rollback()
                 skipped_count += 1
+                continue
 
         # Commit all changes
         conn.commit()
         
         # Clean up old predictions
         try:
-            cur.execute("DELETE FROM predictions WHERE prediction_made_at < NOW() - INTERVAL '1 hour'")
+            cur.execute("DELETE FROM predictions WHERE prediction_made_at < NOW() - (%s * INTERVAL '1 hour')", (PREDICTION_TTL_HOURS,))
             conn.commit()
             logger.info("Cleaned up old predictions")
         except Exception as e:
@@ -235,7 +234,7 @@ def main():
         make_predictions()
         
         # Schedule the periodic prediction task (every 5 minutes)
-        schedule.every(5).minutes.do(make_predictions)
+        schedule.every(PREDICTION_CADENCE_MINUTES).minutes.do(make_predictions)
         
         logger.info("Prediction service started. Making predictions every 5 minutes...")
         
