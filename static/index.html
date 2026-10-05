@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NAVICAST - Maritime Intelligence Platform</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         :root {
@@ -199,6 +199,7 @@
         [data-theme="dark"] .vessel-marker {
             border-color: var(--marker-border);
             box-shadow: 0 0 10px rgba(93, 138, 202, 0.6);
+            background-color: #5D8ACA; /* explicit dark fill */
         }
 
         .prediction-marker {
@@ -212,6 +213,7 @@
         [data-theme="dark"] .prediction-marker {
             border-color: var(--marker-border);
             box-shadow: 0 0 8px rgba(255, 152, 0, 0.8);
+            background-color: #F57C00; /* explicit dark fill */
         }
 
         .prediction-line {
@@ -555,29 +557,6 @@
             z-index: 1000 !important;
         }
 
-        /* Improve prediction indicator */
-        .vessel-direction {
-            position: absolute;
-            width: 0;
-            height: 0;
-            left: 50%;
-            top: 50%;
-            transform-origin: center;
-            border-left: 6px solid transparent;
-            border-right: 6px solid transparent;
-            border-bottom: 12px solid rgba(255, 255, 255, 0.8);
-            margin-left: -6px;
-            margin-top: -2px;
-            pointer-events: none;
-            transition: transform 0.3s ease;
-            filter: drop-shadow(0 0 1px rgba(0,0,0,0.5));
-        }
-            
-        [data-theme="dark"] .vessel-direction {
-            border-bottom-color: rgba(33, 33, 33, 0.8);
-            filter: drop-shadow(0 0 1px rgba(255,255,255,0.5));
-        }
-
         /* Improve popup styling */
         .leaflet-popup-content-wrapper {
             border-radius: 8px;
@@ -626,6 +605,7 @@
             border: 1px solid var(--panel-border);
             border-radius: 12px;
             padding: 3px 8px;
+            font: inherit;
             font-size: 0.8rem;
             margin-right: 4px;
             margin-bottom: 4px;
@@ -650,6 +630,19 @@
 
         [data-theme="dark"] .filter-button:hover {
             background: rgba(200, 200, 200, 0.2);
+        }
+
+        @media (max-width: 640px) {
+            .leaflet-popup-content {
+                max-width: 220px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                transition: none !important;
+                animation: none !important;
+            }
         }
     </style>
 </head>
@@ -679,10 +672,10 @@
         <div class="control-section">
             <div class="control-title">Quick Filters</div>
             <div class="quick-filters">
-                <div class="filter-button" id="filter-all">All Vessels</div>
-                <div class="filter-button" id="filter-moving">Moving</div>
-                <div class="filter-button" id="filter-stationary">Stationary</div>
-                <div class="filter-button" id="filter-predictable">Predictable</div>
+                <button type="button" class="filter-button active" id="filter-all" aria-pressed="true">All Vessels</button>
+                <button type="button" class="filter-button" id="filter-moving" aria-pressed="false">Moving</button>
+                <button type="button" class="filter-button" id="filter-stationary" aria-pressed="false">Stationary</button>
+                <button type="button" class="filter-button" id="filter-predictable" aria-pressed="false">AI-predicted</button>
             </div>
         </div>
         
@@ -772,6 +765,7 @@
             <i class="fas fa-history"></i>
             Last Update: <span id="last-update-time">-</span>
         </div>
+        <div id="fetch-error" style="display: none; color: #e74c3c;"></div>
     </footer>
 
     <div class="loading-overlay">
@@ -785,20 +779,27 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script>
         // --- Constants ---
         const UPDATE_INTERVAL_MS = 10000; // 10 seconds
         const COUNTDOWN_SECONDS = 10;
+        const FETCH_TIMEOUT_MS = 8000; // Abort /vessels fetch after this long
+        const STALE_AFTER_MS = 60000; // AIS timestamp older than this counts as stale (6 missed polls)
+        const FETCH_BACKOFF_BASE_MS = 10000; // First retry delay after a fetch failure
+        const FETCH_BACKOFF_MAX_MS = 120000; // Cap for exponential backoff
+        let fetchFailureCount = 0; // Consecutive fetch failures (drives backoff)
+        let nextFetchAllowedAt = 0; // Timestamp before which polling is skipped (backoff)
         const MIN_SPEED_MOVING_KNOTS = 0.5;
         const PREDICTION_HOURS_AHEAD = 0.5; // 30 minutes
         const MAX_PREDICTION_DISTANCE_NM = 15; // Max distance for valid 30-min prediction
         const MAX_VALID_SPEED_KNOTS = 50; // Max speed for movement validation
         const BALTIC_SEA_BOUNDS = {
-            minLat: 53, maxLat: 66, minLon: 9, maxLon: 30
-        };
+            minLat: 50, maxLat: 70, minLon: 10, maxLon: 30
+        }; // Mirrors config.py BOUNDS (source of truth); kept in sync manually.
         const FINLAND_CENTER = [60.5, 22.5];
         const FINLAND_ZOOM = 7;
+        const MAX_RENDERED_VESSELS = 500; // ponytail: fixed cap, paginate/virtualize if fleet grows
         
         // --- Global State ---
         const vessels = new Map();
@@ -806,6 +807,7 @@
         let countdown = COUNTDOWN_SECONDS;
         let showPredictionLines = true;
         let activeFilter = 'all'; // Default filter
+        let vesselListCapped = false; // True when the render cap trimmed this batch
         let loadingProgressInterval = null; // For loading animation
         
         // --- Map Initialization ---
@@ -920,9 +922,12 @@
 
         function setFilter(filterName) {
             activeFilter = filterName;
-            // Update button visual state
-            document.querySelectorAll('.filter-button').forEach(button => button.classList.remove('active'));
-            document.getElementById(`filter-${filterName}`)?.classList.add('active');
+            // Update button visual + a11y state
+            document.querySelectorAll('.filter-button').forEach(button => {
+                const isActive = button.id === `filter-${filterName}`;
+                button.classList.toggle('active', isActive);
+                button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+            });
             // Apply the filter to visible vessels
             applyVesselFilter();
         }
@@ -1143,7 +1148,7 @@
                 course: formatCourse(vesselData.cog),
                 heading: formatHeading(vesselData.heading),
                 accuracy: formatAccuracy(vesselData.pos_acc),
-                lastUpdate: `${timeDiffMinutes} min ago`,
+                lastUpdate: `${timeDiffMinutes} min ago${isVesselStale(vesselData.current_timestamp) ? ' (stale)' : ''}`,
                 showPrediction: showPredictionSection,
                 // Show coordinates for API prediction, text for calculated
                 predictedPos: hasApiPrediction 
@@ -1388,9 +1393,29 @@
         }
 
         // --- Vessel Data Processing Logic ---
+        function isVesselStale(currentTimestamp) {
+            // Staleness is based on the AIS timestamp delta, not the poll interval:
+            // a vessel is stale when its last real AIS update is older than STALE_AFTER_MS.
+            if (!currentTimestamp) return true;
+            return (Date.now() - Date.parse(currentTimestamp)) > STALE_AFTER_MS;
+        }
+
+        function showFetchError(message) {
+            const el = document.getElementById('fetch-error');
+            if (el) { el.textContent = message; el.style.display = 'block'; }
+        }
+
+        function hideFetchError() {
+            const el = document.getElementById('fetch-error');
+            if (el) { el.textContent = ''; el.style.display = 'none'; }
+        }
+
         async function fetchAndDisplayVessels() {
+            if (Date.now() < nextFetchAllowedAt) return; // exponential backoff: skip this poll
             try {
                 const vesselData = await fetchVesselData();
+                fetchFailureCount = 0; // reset backoff on success
+                hideFetchError();
                 const currentTime = new Date();
                 // Calculate time since last successful update
                 const timeSinceLastUpdate = lastUpdateTimestamp ? (currentTime - lastUpdateTimestamp) / 1000 : 0;
@@ -1412,20 +1437,32 @@
             } catch (error) {
                 console.error("Error fetching or processing vessel data:", error);
                 // Indicate error in the loading UI
-                updateLoadingProgress(-1); 
-                // Consider adding more robust error handling like user notifications or retry delays
+                updateLoadingProgress(-1);
+                // Exponential backoff + visible error instead of silent per-poll failure
+                fetchFailureCount++;
+                const delayMs = Math.min(
+                    FETCH_BACKOFF_BASE_MS * (2 ** (fetchFailureCount - 1)),
+                    FETCH_BACKOFF_MAX_MS
+                );
+                nextFetchAllowedAt = Date.now() + delayMs;
+                showFetchError(`Vessel update failed (${error.message}). Retrying in ${Math.round(delayMs / 1000)}s…`);
             }
         }
 
         async function fetchVesselData() {
-             // Fetches vessel data from the API endpoint
-             // TODO: Add proper error handling for network issues (e.g., using try-catch around fetch)
-             const response = await fetch('/vessels?limit=1000'); // Consider making limit configurable
-             if (!response.ok) {
-                 // Throw an error with status details for better debugging
-                 throw new Error(`API Error: ${response.status} ${response.statusText}`);
+             // Fetches vessel data from the API endpoint with an abort timeout
+             const controller = new AbortController();
+             const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+             try {
+                 const response = await fetch('/vessels?limit=1000', { signal: controller.signal }); // Consider making limit configurable
+                 if (!response.ok) {
+                     // Throw an error with status details for better debugging
+                     throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                 }
+                 return await response.json();
+             } finally {
+                 clearTimeout(timeoutId);
              }
-             return await response.json();
         }
 
         function processVesselData(vesselDataArray, timeSinceLastUpdate) {
@@ -1438,7 +1475,12 @@
                  return { processedVesselIds, apiPredictionCount }; // Return empty set and zero count
             }
 
-            vesselDataArray.forEach(data => {
+            vesselListCapped = vesselDataArray.length > MAX_RENDERED_VESSELS;
+            // Cap limits rendering only: retain every valid ID so removeStaleVessels never evicts off-screen vessels
+            vesselDataArray.forEach(data => { if (data.vessel_id && isValidNumber(data.current_latitude) && isValidNumber(data.current_longitude)) processedVesselIds.add(data.vessel_id); });
+            const renderList = vesselListCapped ? vesselDataArray.slice(0, MAX_RENDERED_VESSELS) : vesselDataArray;
+
+            renderList.forEach(data => {
                     const vesselId = data.vessel_id;
                 // Basic validation: ID and valid coordinates are required
                 if (!vesselId || !isValidNumber(data.current_latitude) || !isValidNumber(data.current_longitude)) {
@@ -1645,7 +1687,7 @@
             // 1. Update Header Stats
             const vesselCountEl = document.getElementById('vessel-count');
             const predictionCountEl = document.getElementById('prediction-count');
-            if (vesselCountEl) vesselCountEl.textContent = vessels.size;
+            if (vesselCountEl) vesselCountEl.textContent = vessels.size + (vesselListCapped ? ` (showing ${MAX_RENDERED_VESSELS})` : '');
             if (predictionCountEl) predictionCountEl.textContent = apiPredictionCount;
             
             // 2. Update System Status in Control Panel
@@ -1684,7 +1726,7 @@
              document.getElementById('filter-all').textContent = `All Vessels (${allCount})`;
              document.getElementById('filter-moving').textContent = `Moving (${movingCount})`;
              document.getElementById('filter-stationary').textContent = `Stationary (${stationaryCount})`;
-             document.getElementById('filter-predictable').textContent = `Predictable (${predictableCount})`;
+             document.getElementById('filter-predictable').textContent = `AI-predicted (${predictableCount})`;
         }
         
         function applyVesselFilter() {

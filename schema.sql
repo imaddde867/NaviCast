@@ -2,11 +2,8 @@
 -- PostgreSQL 13.0+
 
 -- Create database
--- Run this command separately first: 
+-- Run this command separately first:
 -- CREATE DATABASE ais_project;
-
--- Connect to the database
-\c ais_project;
 
 -- Drop tables if they exist (for clean setup)
 DROP TABLE IF EXISTS predictions;

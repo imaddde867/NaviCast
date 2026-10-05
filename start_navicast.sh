@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Terminal colors
 GREEN='\033[0;32m'
@@ -10,7 +11,7 @@ NC='\033[0m' # No Color
 
 # Debug flag
 DEBUG=false
-[[ "$1" == "--debug" ]] && DEBUG=true && echo -e "${BLUE}${BOLD}Debug mode enabled${NC}"
+[[ "${1:-}" == "--debug" ]] && DEBUG=true && echo -e "${BLUE}${BOLD}Debug mode enabled${NC}"
 
 # Print banner
 echo -e "\n${BOLD}NAVICAST STARTUP${NC}\n"
@@ -40,10 +41,10 @@ start_service() {
     fi
     
     # Show command in debug mode
-    [[ "$DEBUG" = true ]] && echo -e "  ${BLUE}Debug: Running 'python $script > logs/$log 2>&1 &'${NC}"
+    [[ "$DEBUG" = true ]] && echo -e "  ${BLUE}Debug: Running 'python3 $script > logs/$log 2>&1 &'${NC}"
     
     # Start the service
-    python "$script" > "logs/$log" 2>&1 &
+    python3 "$script" > "logs/$log" 2>&1 &
     local pid=$!
     
     # Give it a moment to start
@@ -68,6 +69,13 @@ cleanup() {
 
 trap cleanup SIGINT SIGTERM
 
+# Port for the API server / web interface (api_server.py reads $PORT, default 8000;
+# same variable drives the compose host mapping).
+export PORT="${PORT:-8000}"
+
+# Ensure the log directory exists before starting services
+mkdir -p logs
+
 # Fire up the services
 echo -e "\n${BOLD}Starting services:${NC}"
 start_service "MQTT client" "mqtt_client.py" "mqtt_output.log" || { cleanup; exit 1; }
@@ -82,7 +90,7 @@ start_service "API server" "api_server.py" "api_output.log" || { cleanup; exit 1
 
 # Show final status message
 echo -e "\n${BOLD}NAVICAST SYSTEM IS RUNNING${NC}"
-echo -e "${BOLD}Web interface:${NC} ${YELLOW}http://localhost:8000${NC}"
+echo -e "${BOLD}Web interface:${NC} ${YELLOW}http://localhost:${PORT}${NC}"
 echo -e "${BOLD}Log files:${NC} ${YELLOW}logs/mqtt_output.log, logs/prediction_output.log, logs/api_output.log${NC}"
 echo -e "\n${BOLD}Press Ctrl+C to stop all services${NC}\n"
 
