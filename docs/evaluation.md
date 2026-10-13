@@ -36,7 +36,7 @@ Observations are deduplicated by `(mmsi, timestampExternal)`. For each observati
 
 ## Owner steps before first deploy (NOT done)
 
-Nothing below has been run. The bucket does not exist, and `wrangler deploy` will fail on the `r2_buckets` binding until it does (`npm run check:deploy` passes without it).
+Nothing below has been run. The bucket does not exist. Create it explicitly first: `npm run check:deploy` is offline and passes without it, but how `wrangler deploy` treats a missing bucket varies by Wrangler version.
 
 1. `npx wrangler r2 bucket create navicast-ais-archive`
 2. `npm test && npm run check:deploy`
