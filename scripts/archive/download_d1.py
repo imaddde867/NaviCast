@@ -15,12 +15,22 @@ import tempfile
 import urllib.error
 import urllib.request
 
-PAGE_SIZE_DEFAULT = 2
+PAGE_SIZE_DEFAULT = 10
 MAX_PAGE_SIZE = 10
-MAX_BODY_BYTES = 1_900_000
+# The reader selects hex(body), which doubles the size on the wire against D1's 2 MB string limit.
+MAX_BODY_BYTES = 900_000
 MAX_METADATA_RAW_BYTES = 20_000_000
 AIS_KEY = re.compile(r"ais/(\d{4})/(\d{2})/(\d{2})/(\d{2})/(\d{2})\.ndjson\.gz\Z")
 META_KEY = re.compile(r"meta/(\d{4})/(\d{2})/(\d{2})\.json\.gz\Z")
+
+# Every statement is a primary-key range or point lookup with no OR and no kind predicate, so D1
+# reads only the rows it returns (research/test_download_d1.py asserts the plans against sqlite3).
+_COLUMNS = "key, kind, scheduled_at, fetched_at, data_updated_at, count, hex(body) AS body_hex"
+AIS_PAGE_SQL = f"SELECT {_COLUMNS} FROM archive_objects WHERE key > ? AND key < ? ORDER BY key LIMIT {{limit}}"
+META_SQL = f"SELECT {_COLUMNS} FROM archive_objects WHERE key = ?"
+_TOTALS = "SELECT count(*) AS n, coalesce(sum(length(body)), 0) AS bytes FROM archive_objects WHERE "
+AIS_TOTALS_SQL = _TOTALS + "key > ? AND key < ?"
+META_TOTALS_SQL = _TOTALS + "key = ?"
 
 
 def parse_day(value):
@@ -183,17 +193,8 @@ def _validate_blob(row, day):
     raise ValueError("archive row has unknown kind")
 
 
-def _query_page(account_id, database_id, token, day, cursor, page_size):
-    prefix = f"ais/{day:%Y/%m/%d}/"
-    upper = prefix + "\uffff"
-    meta_key = f"meta/{day:%Y/%m/%d}.json.gz"
-    sql = (
-        "SELECT key, kind, scheduled_at, fetched_at, data_updated_at, count, "
-        "hex(body) AS body_hex FROM archive_objects "
-        "WHERE ((kind = 'ais' AND key >= ? AND key < ?) OR (kind = 'meta' AND key = ?)) "
-        f"AND key > ? ORDER BY key LIMIT {page_size}"
-    )
-    payload = json.dumps({"sql": sql, "params": [prefix, upper, meta_key, cursor]}).encode("utf-8")
+def _query(account_id, database_id, token, sql, params, max_rows):
+    payload = json.dumps({"sql": sql, "params": params}).encode("utf-8")
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/d1/database/{database_id}/query"
     request = urllib.request.Request(
         url, data=payload, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -216,9 +217,19 @@ def _query_page(account_id, database_id, token, day, cursor, page_size):
     if not isinstance(query_result, dict):
         raise RuntimeError("Cloudflare D1 returned an invalid page")
     rows = query_result.get("results")
-    if query_result.get("success") is not True or not isinstance(rows, list) or len(rows) > page_size:
+    if query_result.get("success") is not True or not isinstance(rows, list) or len(rows) > max_rows:
         raise RuntimeError("Cloudflare D1 returned an invalid page")
     return rows
+
+
+def _server_totals(account_id, database_id, token, sql, params):
+    rows = _query(account_id, database_id, token, sql, params, 1)
+    if len(rows) != 1 or not isinstance(rows[0], dict):
+        raise RuntimeError("Cloudflare D1 returned an invalid totals result")
+    n, size = rows[0].get("n"), rows[0].get("bytes")
+    if any(not isinstance(v, int) or isinstance(v, bool) or v < 0 for v in (n, size)):
+        raise RuntimeError("Cloudflare D1 returned an invalid totals result")
+    return n, size
 
 
 def _safe_target(root, key):
@@ -281,6 +292,30 @@ def _independent_roots(output_dir, backup_dir):
     return output, backup
 
 
+def _save_row(row, day, output, backup):
+    """Validate one row and write it to both roots, verified byte for byte. Returns its manifest entry."""
+    body, source, count = _validate_blob(row, day)
+    key = row["key"]
+    out_target = _safe_target(output, key)
+    backup_target = _safe_target(backup, key)
+    _check_existing(out_target, body)
+    _check_existing(backup_target, body)
+    expected = hashlib.sha256(body).hexdigest()
+    for target in (out_target, backup_target):
+        if not target.exists():
+            _write_atomic(target, body)
+        actual = target.read_bytes()
+        if len(actual) != len(body) or hashlib.sha256(actual).hexdigest() != expected:
+            raise ValueError(f"archive copy failed verification: {target}")
+    return {
+        "key": key, "kind": row["kind"], "sha256": expected, "size": len(body), "source": source,
+        "count": count,
+        "scheduled_at": _utc_from_ms(row["scheduled_at"]).isoformat().replace("+00:00", "Z"),
+        "fetched_at": _utc_from_ms(row["fetched_at"]).isoformat().replace("+00:00", "Z"),
+        "data_updated_at": row.get("data_updated_at"),
+    }
+
+
 def download_day(account_id, database_id, day_value, output_dir, backup_dir, token, page_size=PAGE_SIZE_DEFAULT):
     day = parse_day(day_value)
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", account_id):
@@ -295,12 +330,16 @@ def download_day(account_id, database_id, day_value, output_dir, backup_dir, tok
     output.mkdir(parents=True, exist_ok=True)
     backup.mkdir(parents=True, exist_ok=True)
 
-    cursor = ""
+    prefix = f"ais/{day:%Y/%m/%d}/"
+    upper = prefix[:-1] + "0"  # '0' is the character after '/', so this bounds the day's keys
+    meta_key = f"meta/{day:%Y/%m/%d}.json.gz"
+    sql = AIS_PAGE_SQL.format(limit=page_size)
+    cursor = prefix
     entries = []
     ais_minutes = set()
     updated_counts = {}
     while True:
-        rows = _query_page(account_id, database_id, token, day, cursor, page_size)
+        rows = _query(account_id, database_id, token, sql, [cursor, upper], page_size)
         if not rows:
             break
         for row in rows:
@@ -309,39 +348,35 @@ def download_day(account_id, database_id, day_value, output_dir, backup_dir, tok
             key = row.get("key")
             if not isinstance(key, str) or key <= cursor:
                 raise ValueError("Cloudflare D1 page is not strictly key-ordered")
-            body, source, count = _validate_blob(row, day)
-            out_target = _safe_target(output, key)
-            backup_target = _safe_target(backup, key)
-            _check_existing(out_target, body)
-            _check_existing(backup_target, body)
-            for target in (out_target, backup_target):
-                if not target.exists():
-                    _write_atomic(target, body)
-                actual = target.read_bytes()
-                digest = hashlib.sha256(actual).hexdigest()
-                if len(actual) != len(body) or digest != hashlib.sha256(body).hexdigest():
-                    raise ValueError(f"archive copy failed verification: {target}")
-            scheduled_at = _utc_from_ms(row["scheduled_at"])
-            fetched_at = _utc_from_ms(row["fetched_at"])
-            entries.append({
-                "key": key, "kind": row["kind"], "sha256": hashlib.sha256(body).hexdigest(),
-                "size": len(body), "source": source, "count": count,
-                "scheduled_at": scheduled_at.isoformat().replace("+00:00", "Z"),
-                "fetched_at": fetched_at.isoformat().replace("+00:00", "Z"),
-                "data_updated_at": row.get("data_updated_at"),
-            })
-            if row["kind"] == "ais":
-                match = AIS_KEY.fullmatch(key)
-                ais_minutes.add((int(match.group(4)), int(match.group(5))))
-                update = row.get("data_updated_at")
-                if update is not None:
-                    updated_counts[update] = updated_counts.get(update, 0) + 1
+            entries.append(_save_row(row, day, output, backup))
+            match = AIS_KEY.fullmatch(key)  # _validate_blob already rejected anything else
+            ais_minutes.add((int(match.group(4)), int(match.group(5))))
+            update = row.get("data_updated_at")
+            if update is not None:
+                updated_counts[update] = updated_counts.get(update, 0) + 1
             cursor = key
         if len(rows) < page_size:
             break
+    ais_entries = len(entries)
+    ais_bytes = sum(entry["size"] for entry in entries)
+
+    meta_rows = _query(account_id, database_id, token, META_SQL, [meta_key], 1)
+    meta_present = bool(meta_rows)
+    for row in meta_rows:
+        if not isinstance(row, dict) or row.get("key") != meta_key:
+            raise ValueError("Cloudflare D1 returned an invalid metadata row")
+        entries.append(_save_row(row, day, output, backup))
+    meta_bytes = sum(entry["size"] for entry in entries[ais_entries:])
 
     if not entries:
         raise ValueError("no archive rows found for the requested UTC day")
+    # Server-side cross-check before any manifest: a late or skipped row fails the run. Gaps do not.
+    if _server_totals(account_id, database_id, token, AIS_TOTALS_SQL, [prefix, upper]) != (ais_entries, ais_bytes):
+        raise ValueError("server-side AIS count/bytes do not match the downloaded rows; rerun the day")
+    if _server_totals(account_id, database_id, token, META_TOTALS_SQL, [meta_key]) != (
+            len(entries) - ais_entries, meta_bytes):
+        raise ValueError("server-side metadata count/bytes do not match the downloaded rows; rerun the day")
+
     missing_minutes = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in range(60)
                        if (hour, minute) not in ais_minutes]
     manifest = {
@@ -350,6 +385,7 @@ def download_day(account_id, database_id, day_value, output_dir, backup_dir, tok
         "files": entries,
         "ais_minutes_present": len(ais_minutes),
         "ais_minutes_missing": missing_minutes,
+        "meta_present": meta_present,
         "repeated_data_updated_at": {
             value: count for value, count in sorted(updated_counts.items()) if count > 1
         },
@@ -383,6 +419,7 @@ def main(argv=None):
         "day": manifest["day"], "files": len(manifest["files"]),
         "ais_minutes_present": manifest["ais_minutes_present"],
         "ais_minutes_missing": len(manifest["ais_minutes_missing"]),
+        "meta_present": manifest["meta_present"],
         "repeated_data_updated_at": manifest["repeated_data_updated_at"],
     }, sort_keys=True))
     return 0

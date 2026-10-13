@@ -6,6 +6,7 @@ import io
 import json
 from pathlib import Path
 import re
+import sqlite3
 import sys
 import urllib.error
 
@@ -66,8 +67,23 @@ def _bad_meta_row(vessel):
     return row
 
 
-def _fake_cloudflare(rows, page_sizes, expected_day=DAY):
-    ordered = sorted(rows, key=lambda row: row["key"])
+MIGRATION = Path(__file__).resolve().parents[1] / "migrations" / "0001_archive_objects.sql"
+
+
+def _database(rows):
+    """In-memory SQLite built from the real migration, so the downloader's SQL strings really run."""
+    conn = sqlite3.connect(":memory:")
+    conn.executescript(MIGRATION.read_text())
+    for row in rows:
+        conn.execute("INSERT INTO archive_objects VALUES (?, ?, ?, ?, ?, ?, ?)", (
+            row["key"], row["kind"], row["scheduled_at"], row["fetched_at"], row["data_updated_at"],
+            row["count"], bytes.fromhex(row["body_hex"])))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _fake_cloudflare(rows, page_sizes, late_row=None):
+    conn = _database(rows)
 
     def urlopen(request, timeout):
         assert request.full_url == (
@@ -76,27 +92,26 @@ def _fake_cloudflare(rows, page_sizes, expected_day=DAY):
         assert request.get_method() == "POST"
         assert request.get_header("Authorization") == f"Bearer {TOKEN}"
         payload = json.loads(request.data)
-        sql = payload["sql"].upper()
-        assert sql.lstrip().startswith("SELECT")
-        assert not re.search(r"\b(?:INSERT|UPDATE|DELETE|DROP|ALTER)\b", sql)
-        assert payload["params"][:2] == [f"ais/{expected_day.replace('-', '/')}/",
-                                        f"ais/{expected_day.replace('-', '/')}/\uffff"]
-        assert payload["params"][2] == f"meta/{expected_day.replace('-', '/')}.json.gz"
-        cursor = payload["params"][3]
-        page_size = int(sql.rsplit("LIMIT ", 1)[1])
-        page_sizes.append(page_size)
-        selected = [row for row in ordered if row["key"] > cursor and (
-            row["key"].startswith(f"ais/{expected_day.replace('-', '/')}/")
-            or row["key"] == f"meta/{expected_day.replace('-', '/')}.json.gz")]
-        result = {"success": True, "result": [{"success": True, "results": selected[:page_size]}]}
+        sql = payload["sql"]
+        assert sql.lstrip().upper().startswith("SELECT")
+        assert not re.search(r"\b(?:INSERT|UPDATE|DELETE|DROP|ALTER)\b", sql.upper())
+        limit = re.search(r"LIMIT (\d+)$", sql)
+        if limit:
+            page_sizes.append(int(limit.group(1)))
+        if late_row and sql.startswith("SELECT count(*)"):  # a delayed invocation writes after the pages
+            conn.execute("INSERT INTO archive_objects VALUES (?, ?, ?, ?, ?, ?, ?)", (
+                late_row["key"], late_row["kind"], late_row["scheduled_at"], late_row["fetched_at"],
+                late_row["data_updated_at"], late_row["count"], bytes.fromhex(late_row["body_hex"])))
+        selected = [dict(row) for row in conn.execute(sql, payload["params"])]
+        result = {"success": True, "result": [{"success": True, "results": selected}]}
         return io.BytesIO(json.dumps(result).encode("utf-8"))
 
     return urlopen
 
 
-def _run(monkeypatch, rows, tmp_path, page_size=1):
+def _run(monkeypatch, rows, tmp_path, page_size=1, late_row=None):
     page_sizes = []
-    monkeypatch.setattr(download_d1.urllib.request, "urlopen", _fake_cloudflare(rows, page_sizes))
+    monkeypatch.setattr(download_d1.urllib.request, "urlopen", _fake_cloudflare(rows, page_sizes, late_row))
     output, backup = tmp_path / "primary", tmp_path / "backup"
     manifest = download_d1.download_day("account123", "00000000-0000-0000-0000-000000000001", DAY,
                                         output, backup, TOKEN, page_size)
@@ -104,11 +119,16 @@ def _run(monkeypatch, rows, tmp_path, page_size=1):
 
 
 def test_paginates_day_scope_verifies_two_copies_and_reports_continuity(monkeypatch, tmp_path):
-    rows = [_ais_row(), _ais_row(minute=2), _meta_row()]
+    rows = [_ais_row(), _ais_row(minute=2), _meta_row(),
+            _ais_row(day="2025-02-02", hour=23, minute=59), _ais_row(day="2025-02-04"),
+            _meta_row(day="2025-02-02"), _meta_row(day="2025-02-04")]
 
     manifest, output, backup, pages = _run(monkeypatch, rows, tmp_path)
 
-    assert pages == [1, 1, 1, 1]
+    assert pages == [1, 1, 1]  # two AIS pages of one row, then the empty page
+    assert [entry["key"] for entry in manifest["files"]] == [
+        "ais/2025/02/03/00/00.ndjson.gz", "ais/2025/02/03/00/02.ndjson.gz", "meta/2025/02/03.json.gz"]
+    assert manifest["meta_present"] is True
     assert manifest["ais_minutes_present"] == 2
     assert len(manifest["ais_minutes_missing"]) == 1438
     assert manifest["repeated_data_updated_at"] == {"2025-02-03T00:00:00Z": 2}
@@ -163,6 +183,41 @@ def test_metadata_rejects_invalid_mmsi(monkeypatch, tmp_path, vessel):
         download_d1.download_day("account123", "00000000-0000-0000-0000-000000000001", DAY,
                                  tmp_path / "primary", tmp_path / "backup", TOKEN, 1)
     assert not list(tmp_path.rglob("manifest-*.json"))
+
+
+def test_missing_metadata_and_minute_gaps_are_reported_not_fatal(monkeypatch, tmp_path):
+    manifest, _, _, _ = _run(monkeypatch, [_ais_row(), _ais_row(hour=5, minute=7)], tmp_path, page_size=10)
+    assert manifest["meta_present"] is False
+    assert manifest["ais_minutes_present"] == 2
+    assert len(manifest["ais_minutes_missing"]) == 1438
+
+
+def test_late_row_written_after_paging_fails_the_cross_check_without_manifest(monkeypatch, tmp_path):
+    with pytest.raises(ValueError, match="server-side AIS count/bytes"):
+        _run(monkeypatch, [_ais_row(), _meta_row()], tmp_path, page_size=10, late_row=_ais_row(minute=9))
+    assert not list(tmp_path.rglob("manifest-*.json"))
+
+
+def test_oversize_body_is_rejected(monkeypatch, tmp_path):
+    row = _ais_row(body_override=b"\0" * (download_d1.MAX_BODY_BYTES + 1))
+    monkeypatch.setattr(download_d1.urllib.request, "urlopen", _fake_cloudflare([row], []))
+    with pytest.raises(ValueError, match="exceeds"):
+        download_d1.download_day("account123", "00000000-0000-0000-0000-000000000001", DAY,
+                                 tmp_path / "primary", tmp_path / "backup", TOKEN, 1)
+
+
+def test_sql_uses_only_primary_key_index_searches():
+    conn = _database([_ais_row(), _meta_row()])
+    statements = [
+        (download_d1.AIS_PAGE_SQL.format(limit=10), ["ais/2025/02/03/", "ais/2025/02/030"]),
+        (download_d1.META_SQL, ["meta/2025/02/03.json.gz"]),
+        (download_d1.AIS_TOTALS_SQL, ["ais/2025/02/03/", "ais/2025/02/030"]),
+        (download_d1.META_TOTALS_SQL, ["meta/2025/02/03.json.gz"]),
+    ]
+    for sql, params in statements:
+        plan = " | ".join(row[3] for row in conn.execute("EXPLAIN QUERY PLAN " + sql, params))
+        assert "SEARCH archive_objects USING INDEX sqlite_autoindex_archive_objects_1" in plan, plan
+        assert not re.search(r"TEMP B-TREE|MULTI-INDEX OR|SCAN", plan), plan
 
 
 def test_path_traversal_key_is_rejected_before_any_manifest(monkeypatch, tmp_path):
