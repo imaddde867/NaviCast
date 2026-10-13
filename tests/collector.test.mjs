@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
-import { archiveKey, collectMetadata, collectSnapshot, metaKey, MAX_BODY_BYTES, PAUSE_AT_BYTES } from '../cloudflare/collector.mjs';
-import worker, { loadRawSnapshot, loadVesselMetadata } from '../cloudflare/worker.mjs';
+import { archiveKey, collectMetadata, collectSnapshot, metaKey, MAX_BODY_BYTES, MAX_RETENTION_DAYS } from '../cloudflare/collector.mjs';
+import worker, { loadRawSnapshot, loadVesselMetadata, METADATA_CRON, SNAPSHOT_CRON } from '../cloudflare/worker.mjs';
 import { fakeD1 } from './fake_d1.mjs';
 
 const NOW = Date.UTC(2026, 9, 13, 8, 5, 42, 123);
@@ -114,32 +115,59 @@ test('D1 errors and a missing binding are thrown, not swallowed', async t => {
   await assert.rejects(collectSnapshot({}, NOW, loadRawSnapshot), /binding missing/);
 });
 
-test('pauses at the storage threshold without fetching upstream or writing', async t => {
+const DAY_MS = 86_400_000;
+const seed = (db, key, kind = key.startsWith('ais') ? 'ais' : 'meta') => db.rows.set(key, { key, kind, fetched_at: 1 });
+
+test('pauses when the oldest AIS row is more than the retention age, without fetching or writing', async t => {
   quiet(t);
-  const over = setup(t, [feature(230000001)], undefined, { size: PAUSE_AT_BYTES });
-  await assert.rejects(collectSnapshot(over.env, NOW, loadRawSnapshot), /archive paused: storage threshold/);
-  await assert.rejects(collectMetadata(over.env, NOW, metaLoader([vessel(230000001)])), /archive paused: storage threshold/);
-  assert.equal(inserts(over.db).length, 0);
-  assert.equal(over.fetches.length, 0);
-  const under = setup(t, [feature(230000001)], undefined, { size: PAUSE_AT_BYTES - 1 });
-  assert.equal((await collectSnapshot(under.env, NOW, loadRawSnapshot)).ok, true);
+  const old = setup(t, [feature(230000001)]);
+  seed(old.db, archiveKey(NOW - MAX_RETENTION_DAYS * DAY_MS - 60_000));
+  seed(old.db, archiveKey(NOW - 60_000));
+  const message = /archive paused: retention exceeded, download and clean up/;
+  await assert.rejects(collectSnapshot(old.env, NOW, loadRawSnapshot), message);
+  await assert.rejects(collectMetadata(old.env, NOW, metaLoader([vessel(230000001)])), message);
+  assert.equal(inserts(old.db).length, 0);
+  assert.equal(old.fetches.length, 0);
+  assert.equal(old.db.queries.filter(q => q.sql.startsWith('SELECT key')).length, 2, 'one indexed row per run');
 });
 
-test('fails closed when D1 does not report its size', async t => {
-  quiet(t);
-  const { env, db } = setup(t, [feature(230000001)], undefined, { size: null });
-  await assert.rejects(collectSnapshot(env, NOW, loadRawSnapshot), /D1 size unavailable/);
-  assert.equal(inserts(db).length, 0);
+test('exactly the retention age, a newer oldest row, an empty table and old meta rows do not pause', async t => {
+  const edge = setup(t, [feature(230000001)]);
+  const minute = Math.floor(NOW / 60_000) * 60_000; // real cron scheduledTime is on the minute
+  seed(edge.db, archiveKey(minute - MAX_RETENTION_DAYS * DAY_MS));
+  assert.equal((await collectSnapshot(edge.env, minute, loadRawSnapshot)).ok, true);
+  const metaOnly = setup(t, [feature(230000001)]);
+  seed(metaOnly.db, metaKey(NOW - 30 * DAY_MS));
+  assert.equal((await collectSnapshot(metaOnly.env, NOW, loadRawSnapshot)).ok, true);
+  const empty = setup(t, [feature(230000001)]);
+  assert.equal((await collectSnapshot(empty.env, NOW, loadRawSnapshot)).ok, true);
+  assert.deepEqual(empty.db.queries.map(q => q.sql.split(' ')[0]), ['SELECT', 'INSERT']);
+});
+
+test('timestampExternal must be an integer, and data_updated_at is a string or null in header and row', async t => {
+  const { env, db } = setup(t, []);
+  const loader = updated => async () => ({ fetched_at: NOW, source: 'fixture', updated_at: updated, features: [
+    feature(230000001, { timestampExternal: 1.5 }), feature(230000002, { timestampExternal: '1760000000000' }),
+    feature(230000003, { timestampExternal: SEEN }),
+  ] });
+  await collectSnapshot(env, NOW, loader(12345));
+  const row = db.rows.get(archiveKey(NOW));
+  const [header, a, b, c] = lines(row.body);
+  assert.deepEqual([a.timestampExternal, a.age_s, b.timestampExternal, b.age_s, c.timestampExternal], [null, null, null, null, SEEN]);
+  assert.deepEqual([header.data_updated_at, row.data_updated_at], ['12345', '12345']);
+  db.rows.clear();
+  await collectSnapshot(env, NOW, loader(undefined));
+  assert.deepEqual([lines(db.rows.get(archiveKey(NOW)).body)[0].data_updated_at, db.rows.get(archiveKey(NOW)).data_updated_at], [null, null]);
 });
 
 test('rejects bodies over the D1 row cap and writes nothing', async t => {
   quiet(t);
   const { env, db } = setup(t, []);
-  // Random hex does not compress below ~50%, so this gzip body exceeds 1.9 MB.
-  const noisy = Array.from({ length: 60000 }, () => vessel(230000001, { name: randomBytes(32).toString('hex') }));
+  // Random hex does not compress below ~50%, so this gzip body exceeds MAX_BODY_BYTES.
+  const noisy = Array.from({ length: 30000 }, () => vessel(230000001, { name: randomBytes(32).toString('hex') }));
   await assert.rejects(collectMetadata(env, NOW, metaLoader(noisy)), /Archive body too large/);
   assert.equal(inserts(db).length, 0);
-  assert.ok(MAX_BODY_BYTES < 2_000_000);
+  assert.equal(MAX_BODY_BYTES, 900_000);
 });
 
 test('collectMetadata archives vessels without lat/lon as one wrapped JSON row', async t => {
@@ -185,13 +213,13 @@ test('loadVesselMetadata fetches the vessels feed and validates the array shape'
 
 test('scheduled dispatches the minute cron to AIS and the daily cron to metadata', async t => {
   const { env, db, fetches } = setup(t, [feature(230000001)], undefined);
-  assert.equal((await worker.scheduled({ cron: '* * * * *', scheduledTime: NOW }, env)).key, 'ais/2026/10/13/08/05.ndjson.gz');
+  assert.equal((await worker.scheduled({ cron: SNAPSHOT_CRON, scheduledTime: NOW }, env)).key, 'ais/2026/10/13/08/05.ndjson.gz');
   assert.equal(fetches.at(-1).url, 'https://meri.digitraffic.fi/api/ais/v1/locations');
   t.mock.method(globalThis, 'fetch', async url => {
     fetches.push({ url: String(url) });
     return Response.json([vessel(230000001)]);
   });
-  assert.equal((await worker.scheduled({ cron: '10 0 * * *', scheduledTime: NOW }, env)).key, 'meta/2026/10/13.json.gz');
+  assert.equal((await worker.scheduled({ cron: METADATA_CRON, scheduledTime: NOW }, env)).key, 'meta/2026/10/13.json.gz');
   assert.equal(fetches.at(-1).url, 'https://meri.digitraffic.fi/api/ais/v1/vessels');
   assert.deepEqual([...db.rows.values()].map(r => r.kind), ['ais', 'meta']);
 });
@@ -205,6 +233,22 @@ test('scheduled rejects so the cron run is marked failed', async t => {
   assert.equal(inserts(db).length, 0);
   const metaDown = setup(t, [], () => new Response('unavailable', { status: 503 }));
   await assert.rejects(worker.scheduled({ cron: '10 0 * * *', scheduledTime: NOW }, metaDown.env), /Invalid upstream response/);
-  const paused = setup(t, [feature(230000001)], undefined, { size: PAUSE_AT_BYTES });
-  await assert.rejects(worker.scheduled({ cron: '* * * * *', scheduledTime: NOW }, paused.env), /storage threshold/);
+  const paused = setup(t, [feature(230000001)]);
+  seed(paused.db, archiveKey(NOW - (MAX_RETENTION_DAYS + 1) * DAY_MS));
+  await assert.rejects(worker.scheduled({ cron: '* * * * *', scheduledTime: NOW }, paused.env), /retention exceeded/);
+});
+
+test('scheduled throws on an unknown cron and does no work', async t => {
+  quiet(t);
+  const { env, db, fetches } = setup(t, [feature(230000001)]);
+  for (const cron of ['*/5 * * * *', undefined, '']) {
+    await assert.rejects(worker.scheduled({ cron, scheduledTime: NOW }, env), /Unknown cron/);
+  }
+  assert.equal(fetches.length + db.queries.length, 0);
+});
+
+test('worker cron constants match wrangler.jsonc triggers', () => {
+  const config = readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
+  const crons = JSON.parse(/"crons":\s*(\[[^\]]*\])/.exec(config)[1]);
+  assert.deepEqual(crons, [SNAPSHOT_CRON, METADATA_CRON]);
 });

@@ -321,8 +321,11 @@ test('metadata is live, docs serve HTML, and other routes use assets', async t =
 });
 
 const AGE_MS = ms => Date.now() - ms;
-function archived(db, ageMs, key = 'ais/2026/10/13/08/05.ndjson.gz') {
-  db.rows.set(key, { key, kind: key.startsWith('ais') ? 'ais' : 'meta', fetched_at: AGE_MS(ageMs) });
+function archived(db, ageMs, key = 'ais/2026/10/13/08/05.ndjson.gz', dataAgeMs = null) {
+  db.rows.set(key, {
+    key, kind: key.startsWith('ais') ? 'ais' : 'meta', fetched_at: AGE_MS(ageMs),
+    data_updated_at: dataAgeMs === null ? null : new Date(AGE_MS(dataAgeMs)).toISOString(),
+  });
 }
 
 test('/health is 200 with ok and age_s when the newest AIS row is under five minutes old', async t => {
@@ -357,6 +360,30 @@ test('/health is 503 when the newest AIS row is stale, even with a fresh metadat
   assert.deepEqual(Object.keys(body).sort(), ['age_s', 'ok']);
   assert.equal(body.ok, false);
   assert.ok(body.age_s >= 359);
+});
+
+test('/health 503 on a frozen upstream, but null or unparseable data_updated_at alone is not a failure', async t => {
+  const status = async (...args) => {
+    const h = harness(t);
+    h.env.AIS_ARCHIVE_DB = fakeD1();
+    archived(h.env.AIS_ARCHIVE_DB, ...args);
+    const response = await h.request('/health');
+    return [response.status, await response.json()];
+  };
+  const key = 'ais/2026/10/13/08/05.ndjson.gz';
+  const fresh = await status(30_000, key, 2 * 60_000);
+  assert.equal(fresh[0], 200);
+  assert.equal(fresh[1].ok, true);
+  const frozen = await status(30_000, key, 11 * 60_000);
+  assert.equal(frozen[0], 503);
+  assert.deepEqual(Object.keys(frozen[1]).sort(), ['age_s', 'ok']);
+  assert.equal(frozen[1].ok, false);
+  assert.ok(frozen[1].age_s <= 35, 'fetched_at is fresh; only the data is old');
+  assert.equal((await status(30_000, key, null))[0], 200);
+  const h = harness(t);
+  h.env.AIS_ARCHIVE_DB = fakeD1();
+  h.env.AIS_ARCHIVE_DB.rows.set(key, { key, kind: 'ais', fetched_at: Date.now() - 1000, data_updated_at: 'not a date' });
+  assert.equal((await h.request('/health')).status, 200);
 });
 
 test('/health is 503 with only ok:false when the archive is empty or D1 fails', async t => {

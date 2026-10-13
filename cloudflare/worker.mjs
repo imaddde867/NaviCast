@@ -3,8 +3,11 @@ import { collectMetadata, collectSnapshot } from './collector.mjs';
 
 const UPSTREAM = 'https://meri.digitraffic.fi/api/ais/v1/locations';
 const VESSELS_UPSTREAM = 'https://meri.digitraffic.fi/api/ais/v1/vessels';
-const METADATA_CRON = '10 0 * * *';
+// Must match triggers.crons in wrangler.jsonc (tests/collector.test.mjs checks this).
+export const SNAPSHOT_CRON = '* * * * *';
+export const METADATA_CRON = '10 0 * * *';
 const HEALTH_MAX_AGE_MS = 5 * 60 * 1000;
+const HEALTH_MAX_DATA_AGE_MS = 10 * 60 * 1000;
 const HORIZON_MS = 30 * 60 * 1000;
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const NAV_STATUS = [
@@ -208,14 +211,19 @@ function csv(vessels) {
 
 // Reads exactly one row through the primary-key index (newest 'ais/' key), never MAX() over the table,
 // so a health poll costs a couple of rows read against D1's 5M/day free quota. Exposes only ok/age_s.
+// 503 when collection stopped (fetched_at old) or the upstream froze (data_updated_at old while the
+// collector keeps fetching). A null or unparseable data_updated_at is not a failure by itself.
 async function health(env) {
   try {
     const row = await env.AIS_ARCHIVE_DB.prepare(
-      "SELECT fetched_at FROM archive_objects WHERE key >= 'ais/' AND key < 'ais0' ORDER BY key DESC LIMIT 1",
+      "SELECT fetched_at, data_updated_at FROM archive_objects WHERE key >= 'ais/' AND key < 'ais0' ORDER BY key DESC LIMIT 1",
     ).first();
     if (!Number.isFinite(row?.fetched_at)) return json({ ok: false }, 503);
-    const age = Date.now() - row.fetched_at;
-    return json({ ok: age <= HEALTH_MAX_AGE_MS, age_s: Math.round(age / 1000) }, age <= HEALTH_MAX_AGE_MS ? 200 : 503);
+    const now = Date.now();
+    const age = now - row.fetched_at;
+    const dataTime = row.data_updated_at == null ? NaN : Date.parse(row.data_updated_at);
+    const ok = age <= HEALTH_MAX_AGE_MS && !(now - dataTime > HEALTH_MAX_DATA_AGE_MS);
+    return json({ ok, age_s: Math.round(age / 1000) }, ok ? 200 : 503);
   } catch (error) {
     console.error('health check failed', error);
     return json({ ok: false }, 503);
@@ -262,7 +270,8 @@ export default {
   },
   // Awaited, not ctx.waitUntil: a rejection must fail the cron run so it shows in the cron status.
   async scheduled(event, env) {
+    if (event.cron === SNAPSHOT_CRON) return collectSnapshot(env, event.scheduledTime, loadRawSnapshot);
     if (event.cron === METADATA_CRON) return collectMetadata(env, event.scheduledTime, loadVesselMetadata);
-    return collectSnapshot(env, event.scheduledTime, loadRawSnapshot);
+    throw new Error('Unknown cron');
   },
 };

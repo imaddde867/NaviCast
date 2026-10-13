@@ -13,7 +13,7 @@ function record(feature, fetchedAt) {
   if (!Number.isInteger(mmsi) || mmsi <= 0 || mmsi > 999999999
       || latitude === null || latitude < -90 || latitude > 90
       || longitude === null || longitude < -180 || longitude > 180) return null;
-  const ts = num(p?.timestampExternal);
+  const ts = Number.isSafeInteger(p?.timestampExternal) ? p.timestampExternal : null;
   return {
     mmsi, lat: latitude, lon: longitude, timestampExternal: ts,
     age_s: ts === null ? null : Math.round((fetchedAt - ts) / 1000),
@@ -22,10 +22,14 @@ function record(feature, fetchedAt) {
   };
 }
 
-// D1 rows are limited to 2 MB; scripts/archive/download_d1.py rejects bodies over the same cap.
-export const MAX_BODY_BYTES = 1_900_000;
-// Pause writes at this database size so the owner can download, verify and delete (docs/hosting.md).
-export const PAUSE_AT_BYTES = 350_000_000;
+// D1 rows are limited to 2 MB and the downloader reads hex(body), which doubles the size on the wire;
+// scripts/archive/download_d1.py rejects bodies over the same cap.
+export const MAX_BODY_BYTES = 900_000;
+// Pause when the oldest AIS row is older than this: ~43 MB/day * 8 days ~ 345 MB of D1 Free's 500 MB.
+// Age, not database size: SQLite may not shrink after DELETE, so a size-based pause might never lift.
+export const MAX_RETENTION_DAYS = 8;
+
+const text = value => (value == null ? null : String(value));
 
 const stamp = now => new Date(now).toISOString();
 
@@ -51,13 +55,16 @@ function setup(env, now, loader, what) {
   if (typeof loader !== 'function') throw new Error(`${what} loader missing`);
 }
 
-// Reads the D1 size from meta.size_after of a trivial query. The docs list size_after in the result
-// meta object and show it on a SELECT; that read queries return it is taken from that example and was
-// not tested against a live database. Fails closed if the field is absent rather than silently unguarded.
-async function assertCapacity(env) {
-  const { meta } = await env.AIS_ARCHIVE_DB.prepare('SELECT 1').run();
-  if (!Number.isFinite(meta?.size_after)) throw new Error('archive paused: D1 size unavailable');
-  if (meta.size_after >= PAUSE_AT_BYTES) throw new Error('archive paused: storage threshold');
+// One indexed row: the oldest AIS key. Pauses until the owner has downloaded and deleted old days.
+async function assertRetention(env, now) {
+  const row = await env.AIS_ARCHIVE_DB.prepare(
+    "SELECT key FROM archive_objects WHERE key >= 'ais/' AND key < 'ais0' ORDER BY key LIMIT 1",
+  ).first();
+  const [, y, mo, d, h, mi] = /^ais\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{2})\/(\d{2})\.ndjson\.gz$/.exec(row?.key ?? '') ?? [];
+  const oldest = Date.UTC(y, mo - 1, d, h, mi);
+  if (now - oldest > MAX_RETENTION_DAYS * 86_400_000) {
+    throw new Error('archive paused: retention exceeded, download and clean up');
+  }
 }
 
 // First write per key wins: ON CONFLICT DO NOTHING makes a retried minute or day a harmless no-op.
@@ -72,14 +79,14 @@ async function store(env, row, body) {
 export async function collectSnapshot(env, now, snapshotLoader) {
   try {
     setup(env, now, snapshotLoader, 'Snapshot');
-    await assertCapacity(env);
+    await assertRetention(env, now);
     const snap = await snapshotLoader();
     if (typeof snap?.source !== 'string' || !snap.source) throw new Error('Snapshot source missing');
     const rows = snap.features.map(feature => record(feature, snap.fetched_at)).filter(Boolean);
     if (!rows.length) throw new Error('Empty snapshot');
     const header = {
       schema: 1, fetched_at: stamp(snap.fetched_at), source: snap.source,
-      count: rows.length, data_updated_at: snap.updated_at ?? null,
+      count: rows.length, data_updated_at: text(snap.updated_at),
     };
     const body = await gzip([header, ...rows].map(line => JSON.stringify(line)).join('\n') + '\n');
     const key = archiveKey(now);
@@ -99,19 +106,19 @@ export async function collectSnapshot(env, now, snapshotLoader) {
 export async function collectMetadata(env, now, loader) {
   try {
     setup(env, now, loader, 'Metadata');
-    await assertCapacity(env);
+    await assertRetention(env, now);
     const snap = await loader();
     if (typeof snap?.source !== 'string' || !snap.source) throw new Error('Metadata source missing');
     const vessels = snap.vessels.filter(v => Number.isInteger(v?.mmsi) && v.mmsi > 0 && v.mmsi <= 999999999);
     if (!vessels.length) throw new Error('Empty metadata');
     const body = await gzip(JSON.stringify({
       schema: 1, source: snap.source, fetched_at: stamp(snap.fetched_at),
-      data_updated_at: snap.updated_at ?? null, count: vessels.length, vessels,
+      data_updated_at: text(snap.updated_at), count: vessels.length, vessels,
     }));
     const key = metaKey(now);
     await store(env, {
       key, kind: 'meta', scheduled_at: now, fetched_at: snap.fetched_at,
-      data_updated_at: snap.updated_at ?? null, count: vessels.length,
+      data_updated_at: text(snap.updated_at), count: vessels.length,
     }, body);
     return { ok: true, key, count: vessels.length, bytes: body.byteLength };
   } catch (error) {
