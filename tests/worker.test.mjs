@@ -310,7 +310,10 @@ test('metadata is live, health reports upstream availability, docs serve HTML, a
   const docs = await h.request('/docs');
   assert.equal(docs.status, 200);
   assert.match(docs.headers.get('Content-Type'), /text\/html/);
-  assert.match(await docs.text(), /Digitraffic/);
+  const docsText = await docs.text();
+  assert.match(docsText, /Fintraffic \/ digitraffic\.fi/);
+  assert.match(docsText, /creativecommons\.org\/licenses\/by\/4\.0/);
+  assert.match(docsText, /filtered and normalized/);
   const assets = await h.request('/index.html');
   assert.equal(await assets.text(), 'static page');
   assert.equal(h.calls.length, 0);
