@@ -12,9 +12,14 @@
   "routes": [
     { "pattern": "navicast.imadlab.com", "custom_domain": true }
   ],
-  "triggers": { "crons": ["* * * * *"] },
-  "r2_buckets": [
-    { "binding": "AIS_ARCHIVE", "bucket_name": "navicast-ais-archive" }
+  "triggers": { "crons": ["* * * * *", "10 0 * * *"] },
+  "d1_databases": [
+    {
+      "binding": "AIS_ARCHIVE_DB",
+      "database_name": "navicast-ais-archive",
+      // Owner replaces this placeholder only after confirming Workers Free.
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
   ],
   "observability": { "enabled": true }
 }
