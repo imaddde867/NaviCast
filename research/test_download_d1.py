@@ -134,7 +134,7 @@ def test_matching_files_resume_and_conflicting_existing_content_fails(monkeypatc
 @pytest.mark.parametrize("row, message", [
     (_ais_row(body_override=b"not gzip"), "invalid or truncated AIS gzip"),
     (_ais_row(body_override=gzip.compress(
-        (json.dumps({"schema": 1, "source": SOURCE, "fetched_at": "2025-02-03T00:00:05Z",
+        (json.dumps({"schema": 1, "source": SOURCE, "fetched_at": "2025-02-03T00:00:05.123Z",
                     "count": 2, "data_updated_at": "2025-02-03T00:00:00Z"}) + "\n"
          + json.dumps({"mmsi": 230000001, "lat": 60, "lon": 24, "timestampExternal": 1}) + "\n").encode())),
      "header count does not match"),
