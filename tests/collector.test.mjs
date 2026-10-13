@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { randomBytes } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
-import { archiveKey, collectSnapshot } from '../cloudflare/collector.mjs';
-import worker, { loadRawSnapshot } from '../cloudflare/worker.mjs';
+import { archiveKey, collectMetadata, collectSnapshot, metaKey, MAX_BODY_BYTES, PAUSE_AT_BYTES } from '../cloudflare/collector.mjs';
+import worker, { loadRawSnapshot, loadVesselMetadata } from '../cloudflare/worker.mjs';
+import { fakeD1 } from './fake_d1.mjs';
 
 const NOW = Date.UTC(2026, 9, 13, 8, 5, 42, 123);
 const SEEN = Date.now();
@@ -12,24 +14,31 @@ const feature = (mmsi, properties = {}, coordinates = [24, 60]) => ({
     heading: 90, timestamp: 10, timestampExternal: SEEN - 90_000, ...properties },
 });
 
-function setup(t, features, upstream) {
-  const puts = [];
+function setup(t, features, upstream, d1Options) {
+  const fetches = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => {
-    puts.push({ fetch: String(url), options });
+    fetches.push({ url: String(url), options });
     return upstream ? upstream() : Response.json({ type: 'FeatureCollection', dataUpdatedTime: '2026-10-13T08:05:40Z', features });
   });
-  const env = { AIS_ARCHIVE: { async put(key, body, options) { puts.push({ key, body, options }); } } };
-  return { env, puts };
+  const db = fakeD1(d1Options);
+  return { env: { AIS_ARCHIVE_DB: db }, db, fetches };
 }
-const lines = body => gunzipSync(Buffer.from(body)).toString().trimEnd().split('\n').map(line => JSON.parse(line));
+const gunzipText = body => gunzipSync(Buffer.from(body)).toString();
+const lines = body => gunzipText(body).trimEnd().split('\n').map(line => JSON.parse(line));
+const inserts = db => db.queries.filter(q => q.sql.startsWith('INSERT'));
+const quiet = t => t.mock.method(console, 'error', () => {});
+const vessel = (mmsi, extra = {}) => ({ mmsi, name: 'FIXTURE', callSign: 'OHXX', imo: 1000001, shipType: 70,
+  destination: 'HELSINKI', draught: 45, eta: 123456, timestamp: 1, ...extra });
+const metaLoader = vessels => async () => ({ fetched_at: NOW, source: 'https://fixture.test/vessels', updated_at: null, vessels });
 
-test('archiveKey is UTC and minute-granular', () => {
+test('archiveKey and metaKey are UTC', () => {
   assert.equal(archiveKey(NOW), 'ais/2026/10/13/08/05.ndjson.gz');
   assert.equal(archiveKey(Date.UTC(2026, 0, 2, 23, 59, 59)), 'ais/2026/01/02/23/59.ndjson.gz');
+  assert.equal(metaKey(NOW), 'meta/2026/10/13.json.gz');
 });
 
-test('writes one gzipped NDJSON object with header and raw sentinel values', async t => {
-  const { env, puts } = setup(t, [
+test('inserts one gzipped NDJSON row with header and raw sentinel values', async t => {
+  const { env, db, fetches } = setup(t, [
     feature(230000001),
     feature(230000002, { sog: 102.3, cog: 360, heading: 511, rot: -128, navStat: 15, timestampExternal: SEEN - 40 * 60_000 }, [25.5, 59.9]),
     feature(0), feature(1000000000), feature(230000003, {}, [181, 60]),
@@ -38,16 +47,20 @@ test('writes one gzipped NDJSON object with header and raw sentinel values', asy
   ]);
   const result = await collectSnapshot(env, NOW, loadRawSnapshot);
   assert.equal(result.ok, true);
-  const put = puts.find(p => p.key);
-  assert.equal(put.key, 'ais/2026/10/13/08/05.ndjson.gz');
-  assert.equal(put.options.httpMetadata.contentType, 'application/gzip');
-  assert.equal(puts[0].options.headers['Digitraffic-User'], 'NaviCast/imadlab.com');
-  const [header, a, b, ...rest] = lines(put.body);
+  assert.equal(result.count, 2);
+  assert.equal(fetches[0].options.headers['Digitraffic-User'], 'NaviCast/imadlab.com');
+  assert.equal(db.rows.size, 1);
+  const row = db.rows.get('ais/2026/10/13/08/05.ndjson.gz');
+  assert.ok(row.body instanceof ArrayBuffer, 'body is bound as an ArrayBuffer');
+  assert.deepEqual([row.kind, row.scheduled_at, row.count, row.data_updated_at],
+    ['ais', NOW, 2, '2026-10-13T08:05:40Z']);
+  assert.ok(Number.isFinite(row.fetched_at));
+  const [header, a, b, ...rest] = lines(row.body);
   assert.equal(rest.length, 0);
   assert.equal(header.schema, 1);
   assert.equal(header.count, 2);
+  assert.equal(header.fetched_at, new Date(row.fetched_at).toISOString());
   assert.match(header.source, /digitraffic/);
-  assert.ok(Number.isFinite(Date.parse(header.fetched_at)));
   assert.equal(a.mmsi, 230000001);
   assert.deepEqual([a.lat, a.lon, a.sog, a.cog, a.heading, a.rot, a.posAcc, a.raim], [60, 24, 8, 90, 90, 0, true, false]);
   assert.equal(a.timestampExternal, SEEN - 90_000);
@@ -56,71 +69,142 @@ test('writes one gzipped NDJSON object with header and raw sentinel values', asy
   assert.ok(b.age_s > 30 * 60, 'stale observations are kept, with age_s');
 });
 
-test('same minute maps to the same key', async t => {
-  const { env, puts } = setup(t, [feature(230000001)]);
-  await collectSnapshot(env, NOW, loadRawSnapshot);
-  await collectSnapshot(env, NOW + 10_000, loadRawSnapshot);
-  const keys = puts.filter(p => p.key).map(p => p.key);
-  assert.equal(keys.length, 2);
-  assert.equal(keys[0], keys[1]);
+test('a retry in the same minute is a no-op and keeps the first row', async t => {
+  const { env, db } = setup(t, [feature(230000001)]);
+  assert.equal((await collectSnapshot(env, NOW, loadRawSnapshot)).ok, true);
+  const first = db.rows.get('ais/2026/10/13/08/05.ndjson.gz');
+  assert.equal((await collectSnapshot(env, NOW + 10_000, loadRawSnapshot)).ok, true);
+  assert.equal(inserts(db).length, 2);
+  assert.equal(db.rows.size, 1);
+  assert.equal(db.rows.get(first.key), first);
 });
 
 test('accepts an injected snapshot loader', async t => {
-  const { env, puts } = setup(t, []);
+  const { env, db, fetches } = setup(t, []);
   const loader = async () => ({ fetched_at: NOW, source: 'https://fixture.test/ais', features: [feature(230000009)] });
   assert.equal((await collectSnapshot(env, NOW, loader)).count, 1);
-  assert.equal(lines(puts.find(p => p.key).body)[0].source, 'https://fixture.test/ais');
-  assert.equal(puts.filter(p => p.fetch).length, 0);
+  assert.equal(lines([...db.rows.values()][0].body)[0].source, 'https://fixture.test/ais');
+  assert.equal(fetches.length, 0);
 });
 
 test('requires source provenance and a finite scheduled timestamp', async t => {
   const { env } = setup(t, []);
   const featureLoader = async () => ({ fetched_at: NOW, source: 'fixture', features: [feature(230000009)] });
   const missingSource = async () => ({ fetched_at: NOW, features: [feature(230000009)] });
-  t.mock.method(console, 'error', () => {});
+  quiet(t);
   await assert.rejects(collectSnapshot(env, NOW, missingSource), /source missing/);
   await assert.rejects(collectSnapshot(env, undefined, featureLoader), /Invalid scheduled timestamp/);
   assert.equal((await collectSnapshot(env, 0, featureLoader)).key, 'ais/1970/01/01/00/00.ndjson.gz');
 });
 
-test('failures reject and write nothing', async t => {
+test('upstream failures reject and write nothing', async t => {
+  quiet(t);
   for (const upstream of [() => new Response('nope', { status: 503 }), () => new Response('not json'),
     () => Response.json({ type: 'Other' }), () => { throw new Error('network down'); }]) {
-    const { env, puts } = setup(t, [], upstream);
-    t.mock.method(console, 'error', () => {});
+    const { env, db } = setup(t, [], upstream);
     await assert.rejects(collectSnapshot(env, NOW, loadRawSnapshot));
-    assert.equal(puts.filter(p => p.key).length, 0);
+    assert.equal(inserts(db).length, 0);
   }
-  const failing = { AIS_ARCHIVE: { async put() { throw new Error('R2 down'); } } };
-  t.mock.method(globalThis, 'fetch', async () => Response.json({ type: 'FeatureCollection', features: [feature(230000001)] }));
-  await assert.rejects(collectSnapshot(failing, NOW, loadRawSnapshot), /R2 down/);
+});
+
+test('D1 errors and a missing binding are thrown, not swallowed', async t => {
+  quiet(t);
+  const { env } = setup(t, [feature(230000001)], undefined, { fail: new Error('D1 down') });
+  await assert.rejects(collectSnapshot(env, NOW, loadRawSnapshot), /D1 down/);
   await assert.rejects(collectSnapshot({}, NOW, loadRawSnapshot), /binding missing/);
 });
 
-test('worker.scheduled archives with the scheduled timestamp via waitUntil', async t => {
-  const { env, puts } = setup(t, [feature(230000001)]);
-  const pending = [];
-  worker.scheduled({ scheduledTime: NOW }, env, { waitUntil: p => pending.push(p) });
-  assert.equal(pending.length, 1);
-  assert.equal((await pending[0]).ok, true);
-  assert.equal(puts.find(p => p.key).key, 'ais/2026/10/13/08/05.ndjson.gz');
+test('pauses at the storage threshold without fetching upstream or writing', async t => {
+  quiet(t);
+  const over = setup(t, [feature(230000001)], undefined, { size: PAUSE_AT_BYTES });
+  await assert.rejects(collectSnapshot(over.env, NOW, loadRawSnapshot), /archive paused: storage threshold/);
+  await assert.rejects(collectMetadata(over.env, NOW, metaLoader([vessel(230000001)])), /archive paused: storage threshold/);
+  assert.equal(inserts(over.db).length, 0);
+  assert.equal(over.fetches.length, 0);
+  const under = setup(t, [feature(230000001)], undefined, { size: PAUSE_AT_BYTES - 1 });
+  assert.equal((await collectSnapshot(under.env, NOW, loadRawSnapshot)).ok, true);
 });
 
-test('worker.scheduled rejection reaches waitUntil when collection fails', async t => {
-  const { env } = setup(t, [], () => new Response('unavailable', { status: 503 }));
-  t.mock.method(console, 'error', () => {});
-  const pending = [];
-  worker.scheduled({ scheduledTime: NOW }, env, { waitUntil: p => pending.push(p) });
-  assert.equal(pending.length, 1);
-  await assert.rejects(pending[0], /Invalid upstream response/);
+test('fails closed when D1 does not report its size', async t => {
+  quiet(t);
+  const { env, db } = setup(t, [feature(230000001)], undefined, { size: null });
+  await assert.rejects(collectSnapshot(env, NOW, loadRawSnapshot), /D1 size unavailable/);
+  assert.equal(inserts(db).length, 0);
 });
 
-test('worker.scheduled fails closed when the scheduled timestamp is missing', async t => {
-  const { env, puts } = setup(t, [feature(230000001)]);
-  t.mock.method(console, 'error', () => {});
-  const pending = [];
-  worker.scheduled({}, env, { waitUntil: p => pending.push(p) });
-  assert.equal(pending.length, 1);
-  await assert.rejects(pending[0], /Invalid scheduled timestamp/);
-  assert.equal(puts.filter(p => p.fetch).length, 0);
+test('rejects bodies over the D1 row cap and writes nothing', async t => {
+  quiet(t);
+  const { env, db } = setup(t, []);
+  // Random hex does not compress below ~50%, so this gzip body exceeds 1.9 MB.
+  const noisy = Array.from({ length: 60000 }, () => vessel(230000001, { name: randomBytes(32).toString('hex') }));
+  await assert.rejects(collectMetadata(env, NOW, metaLoader(noisy)), /Archive body too large/);
+  assert.equal(inserts(db).length, 0);
+  assert.ok(MAX_BODY_BYTES < 2_000_000);
+});
+
+test('collectMetadata archives vessels without lat/lon as one wrapped JSON row', async t => {
+  const { env, db } = setup(t, []);
+  const vessels = [vessel(230000001), vessel(230000002, { name: null }), vessel(0), vessel(1000000000),
+    vessel(23.5), { name: 'no mmsi' }, null];
+  const result = await collectMetadata(env, NOW, metaLoader(vessels));
+  assert.deepEqual([result.ok, result.key, result.count], [true, 'meta/2026/10/13.json.gz', 2]);
+  const row = db.rows.get('meta/2026/10/13.json.gz');
+  assert.deepEqual([row.kind, row.scheduled_at, row.fetched_at, row.data_updated_at, row.count], ['meta', NOW, NOW, null, 2]);
+  const wrapper = JSON.parse(gunzipText(row.body));
+  assert.deepEqual([wrapper.schema, wrapper.source, wrapper.fetched_at, wrapper.count],
+    [1, 'https://fixture.test/vessels', new Date(NOW).toISOString(), 2]);
+  assert.deepEqual(wrapper.vessels.map(v => v.mmsi), [230000001, 230000002]);
+  assert.equal(wrapper.vessels[0].destination, 'HELSINKI');
+  assert.ok(!('lat' in wrapper.vessels[0]));
+  assert.equal((await collectMetadata(env, NOW + 1000, metaLoader(vessels))).ok, true);
+  assert.equal(db.rows.size, 1, 'same day is idempotent');
+});
+
+test('collectMetadata rejects empty metadata and a missing source', async t => {
+  quiet(t);
+  const { env, db } = setup(t, []);
+  await assert.rejects(collectMetadata(env, NOW, metaLoader([vessel(0)])), /Empty metadata/);
+  await assert.rejects(collectMetadata(env, NOW, async () => ({ fetched_at: NOW, vessels: [vessel(1)] })), /source missing/);
+  assert.equal(inserts(db).length, 0);
+});
+
+test('loadVesselMetadata fetches the vessels feed and validates the array shape', async t => {
+  const list = [vessel(230000001)];
+  const responses = [Response.json(list), Response.json({ type: 'FeatureCollection' }), new Response('down', { status: 503 })];
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => { calls.push({ url: String(url), options }); return responses.shift(); });
+  const snap = await loadVesselMetadata();
+  assert.deepEqual(snap.vessels, list);
+  assert.equal(snap.source, 'https://meri.digitraffic.fi/api/ais/v1/vessels');
+  assert.equal(calls[0].url, snap.source);
+  assert.equal(calls[0].options.headers['Digitraffic-User'], 'NaviCast/imadlab.com');
+  assert.equal(calls[0].options.redirect, 'manual');
+  await assert.rejects(loadVesselMetadata(), /Invalid upstream schema/);
+  await assert.rejects(loadVesselMetadata(), /Invalid upstream response/);
+});
+
+test('scheduled dispatches the minute cron to AIS and the daily cron to metadata', async t => {
+  const { env, db, fetches } = setup(t, [feature(230000001)], undefined);
+  assert.equal((await worker.scheduled({ cron: '* * * * *', scheduledTime: NOW }, env)).key, 'ais/2026/10/13/08/05.ndjson.gz');
+  assert.equal(fetches.at(-1).url, 'https://meri.digitraffic.fi/api/ais/v1/locations');
+  t.mock.method(globalThis, 'fetch', async url => {
+    fetches.push({ url: String(url) });
+    return Response.json([vessel(230000001)]);
+  });
+  assert.equal((await worker.scheduled({ cron: '10 0 * * *', scheduledTime: NOW }, env)).key, 'meta/2026/10/13.json.gz');
+  assert.equal(fetches.at(-1).url, 'https://meri.digitraffic.fi/api/ais/v1/vessels');
+  assert.deepEqual([...db.rows.values()].map(r => r.kind), ['ais', 'meta']);
+});
+
+test('scheduled rejects so the cron run is marked failed', async t => {
+  quiet(t);
+  const upstreamDown = setup(t, [], () => new Response('unavailable', { status: 503 }));
+  await assert.rejects(worker.scheduled({ cron: '* * * * *', scheduledTime: NOW }, upstreamDown.env), /Invalid upstream response/);
+  const { env, db } = setup(t, [feature(230000001)]);
+  await assert.rejects(worker.scheduled({ cron: '* * * * *' }, env), /Invalid scheduled timestamp/);
+  assert.equal(inserts(db).length, 0);
+  const metaDown = setup(t, [], () => new Response('unavailable', { status: 503 }));
+  await assert.rejects(worker.scheduled({ cron: '10 0 * * *', scheduledTime: NOW }, metaDown.env), /Invalid upstream response/);
+  const paused = setup(t, [feature(230000001)], undefined, { size: PAUSE_AT_BYTES });
+  await assert.rejects(worker.scheduled({ cron: '* * * * *', scheduledTime: NOW }, paused.env), /storage threshold/);
 });
