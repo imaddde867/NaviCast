@@ -3,7 +3,7 @@
 NaviCast operating region from OpenStreetMap land polygons (ODbL).
 
 Build-time deps only (NOT in requirements*.txt):
-    pip install numpy shapely pyogrio rasterio
+    pip install numpy==2.5.4 shapely==2.2.0 pyogrio==0.13.0 rasterio==1.5.2   # versions used for the committed asset
 Usage:
     python3 -I scripts/build_land_mask.py [--zip land-polygons-split-4326.zip] [--cell 0.001]
 Downloads ~0.9 GB from osmdata.openstreetmap.de unless --zip is given.

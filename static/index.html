@@ -990,7 +990,7 @@
                 
             vessels.forEach(vessel => {
                 vessel.marker?.setStyle({ color: borderColor });
-                vessel.predictionMarker?.setStyle({ color: borderColor });
+                vessel.predictionMarker?.setStyle({ color: vessel.data?.projection_land_conflict === true ? '#8a8a8a' : borderColor });
             });
         }
 
