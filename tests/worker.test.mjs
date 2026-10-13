@@ -273,7 +273,7 @@ test('metadata is live, health reports upstream availability, docs serve HTML, a
   const h = harness(t);
   const meta = await h.request('/meta');
   assert.equal(meta.status, 200);
-  assert.deepEqual(await meta.json(), { mode: 'live', prediction_method: 'dead_reckoning', prediction_horizon_minutes: 30 });
+  assert.deepEqual(await meta.json(), { mode: 'live', prediction_method: 'dead_reckoning', prediction_horizon_minutes: 30, observation_stale_after_seconds: 300 });
   const docs = await h.request('/docs');
   assert.equal(docs.status, 200);
   assert.match(docs.headers.get('Content-Type'), /text\/html/);

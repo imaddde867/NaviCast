@@ -109,6 +109,32 @@ test('stale or invalid AIS timestamps do not produce a forecast', () => {
     }
 });
 
+test('metadata adjusts hosted REST observation staleness without changing the local default', async () => {
+    const app = dashboard();
+    app.context.AbortController = AbortController;
+    app.context.fetch = async () => ({ ok: true, json: async () => ({
+        mode: 'live', observation_stale_after_seconds: 300
+    }) });
+    await app.run('fetchMetadata()');
+    assert.equal(app.run('isVesselStale(new Date(Date.now() - 180000).toISOString())'), false);
+    assert.equal(app.run('isVesselStale(new Date(Date.now() - 360000).toISOString())'), true);
+});
+
+test('missing or invalid metadata keeps the default 60-second staleness threshold', async () => {
+    for (const metadata of [
+        { mode: 'live' },
+        { mode: 'live', observation_stale_after_seconds: 0 },
+        { mode: 'live', observation_stale_after_seconds: 1801 },
+        { mode: 'live', observation_stale_after_seconds: '300' }
+    ]) {
+        const app = dashboard();
+        app.context.AbortController = AbortController;
+        app.context.fetch = async () => ({ ok: true, json: async () => metadata });
+        await app.run('fetchMetadata()');
+        assert.equal(app.run('isVesselStale(new Date(Date.now() - 90000).toISOString())'), true);
+    }
+});
+
 test('expired API forecast is replaced with a projection from a fresh fix', () => {
     const app = dashboard();
     app.context.data = vessel(1, { predicted_latitude: 60, predicted_longitude: 22.1,
