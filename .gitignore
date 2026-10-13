@@ -91,3 +91,7 @@ output/
 .pytest_cache/
 .superpowers/
 .gitnexus
+node_modules/
+.wrangler/
+.dev.vars
+worker-configuration.d.ts

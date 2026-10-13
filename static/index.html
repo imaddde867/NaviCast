@@ -867,7 +867,7 @@
         const UPDATE_INTERVAL_MS = 10000; // 10 seconds
         const COUNTDOWN_SECONDS = 10;
         const FETCH_TIMEOUT_MS = 8000; // Abort /vessels fetch after this long
-        const STALE_AFTER_MS = 60000; // AIS timestamp older than this counts as stale (6 missed polls)
+        let observationStaleAfterMs = 60000; // AIS timestamp older than this counts as stale
         const FETCH_BACKOFF_BASE_MS = 10000; // First retry delay after a fetch failure
         const FETCH_BACKOFF_MAX_MS = 120000; // Cap for exponential backoff
         let fetchFailureCount = 0; // Consecutive fetch failures (drives backoff)
@@ -1149,6 +1149,10 @@
                 if (!response.ok) throw new Error('Metadata unavailable');
                 const metadata = await response.json();
                 if (!['demo', 'live'].includes(metadata.mode)) throw new Error('Unknown feed mode');
+                if (Number.isFinite(metadata.observation_stale_after_seconds) &&
+                    metadata.observation_stale_after_seconds > 0 && metadata.observation_stale_after_seconds <= 1800) {
+                    observationStaleAfterMs = metadata.observation_stale_after_seconds * 1000;
+                }
                 banner.textContent = metadata.mode === 'demo'
                     ? 'DEMO · Synthetic Baltic vessel positions. Explore constant-course projections, 30 minutes from each fix.'
                     : 'LIVE · Baltic AIS positions from Digitraffic. Constant-course projections, 30 minutes from each fix.';
@@ -1510,10 +1514,10 @@
         // --- Vessel Data Processing Logic ---
         function isVesselStale(currentTimestamp) {
             // Staleness is based on the AIS timestamp delta, not the poll interval:
-            // a vessel is stale when its last real AIS update is older than STALE_AFTER_MS.
+            // a vessel is stale when its last real AIS update is older than the configured threshold.
             if (!currentTimestamp) return true;
             const timestamp = Date.parse(currentTimestamp);
-            return !Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > STALE_AFTER_MS;
+            return !Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > observationStaleAfterMs;
         }
 
         function showFetchError(message) {

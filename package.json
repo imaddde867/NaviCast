@@ -1,0 +1,13 @@
+{
+  "name": "navicast",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/frontend.test.cjs tests/worker.test.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check:deploy": "wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "4.149.0"
+  }
+}
