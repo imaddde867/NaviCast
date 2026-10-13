@@ -30,13 +30,13 @@ Each invocation issues two D1 statements (the retention check and the insert); t
 
 ## Status and deployment gate
 
-Nothing is deployed and no cloud resource has been created. The `database_id` in `wrangler.jsonc` is a placeholder. The owner has not yet confirmed that the account is on Workers Free, and R2 activation was excluded because its checkout requires a payment method.
+The D1 database `navicast-ais-archive` was created on 2026-10-13 and its id is in `wrangler.jsonc`; the owner confirmed in the dashboard that the account is on Workers Free (not checkable through the API with the granted scopes). The migration has not yet been applied and this archive Worker has not been deployed until the steps below are done and recorded. R2 activation was excluded because its checkout requires a payment method.
 
 CPU: the local probe prints a p95 of 4.5 ms process CPU for the snapshot collector and 3.5 ms for the metadata collector (Node on a development machine, fake in-memory D1, 50 warm samples each). These are not Workers CPU time and say nothing about the Workers Free CPU limit.
 
 Owner steps before the archive can start, none of which this branch performs:
 
-- Confirm the account is on Workers Free, create the D1 database, replace the placeholder `database_id`, and apply `migrations/0001_archive_objects.sql`.
+- Apply `migrations/0001_archive_objects.sql` with `npx wrangler d1 migrations apply navicast-ais-archive --remote` (database already created, plan already confirmed).
 - Run `npm ci`, `npm test` and `npm run check:deploy`; a dry-run validates the bundle, not that the database exists or free-tier CPU compliance.
 - Deploy, then confirm that `/health` is 200, that minute rows decompress correctly with scheduled-time keys, and that the first daily metadata row appears.
 - After the first full UTC day, compare the measured D1 size and bytes per day with the ~43 MB/day estimate (from one 960-vessel snapshot; busier periods may differ). If it is higher, lower `MAX_RETENTION_DAYS` before the 8-day window can approach the 500 MB database limit. A full D1 fails inserts closed (`/health` goes 503) but whether DELETE still works on a full database is unverified.

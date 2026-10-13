@@ -17,8 +17,7 @@
     {
       "binding": "AIS_ARCHIVE_DB",
       "database_name": "navicast-ais-archive",
-      // Owner replaces this placeholder only after confirming Workers Free.
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_id": "cb69e58b-d90d-4e83-ab1b-fcae470de050"
     }
   ],
   "observability": { "enabled": true }
