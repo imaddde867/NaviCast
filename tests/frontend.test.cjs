@@ -226,6 +226,7 @@ test('basemap credits OpenStreetMap and Digitraffic data and its licence', () =>
     assert.equal(requests.length, 1);
     assert.equal(requests[0].url, 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
     assert.match(requests[0].options.attribution, /openstreetmap\.org\/copyright/);
+    assert.match(requests[0].options.attribution, /opendatacommons\.org\/licenses\/odbl/);
     assert.match(requests[0].options.attribution, /digitraffic\.fi\/en\/marine-traffic/);
     assert.match(requests[0].options.attribution, /creativecommons\.org\/licenses\/by\/4\.0/);
     assert.match(requests[0].options.attribution, /constant-course estimates added/);

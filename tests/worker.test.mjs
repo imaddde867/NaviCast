@@ -316,6 +316,7 @@ test('projections across land are flagged with the clear fraction but never drop
 
 test('vessels projected outside the mask area get null, not a false all-clear', async t => {
   // Inside the Worker's 50-70N region but north of the mask's 66N edge.
+  assert.equal(isLand(66.5, 24.0), null); // precondition: start is outside the mask
   const h = harness(t, [feature(230123459, { sog: 12, cog: 90 }, [24.0, 66.5])]);
   const [vessel] = await (await h.request()).json();
   assert.equal(vessel.prediction_method, 'dead_reckoning');
@@ -324,6 +325,8 @@ test('vessels projected outside the mask area get null, not a false all-clear', 
 });
 
 test('open-water, unresolved-start and unprojected vessels get false or null land flags', async t => {
+  assert.equal(isLand(58.5, 20.0), false); // preconditions: water start, and Helsinki start on land
+  assert.equal(isLand(60.1695, 24.9525), true);
   const h = harness(t, [feature(230123456, { sog: 12, cog: 90 }, [20.0, 58.5]), // Baltic proper
     feature(230123457, { sog: 8, cog: 90 }, [24.9525, 60.1695]), // Helsinki: start on land => unresolved
     feature(230123458, { sog: 0.1 }, [20.0, 58.5])]); // no projection

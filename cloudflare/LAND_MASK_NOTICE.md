@@ -13,7 +13,8 @@ This file is made available under the ODbL 1.0, and any further derived database
 and attribution. The rest of the repository is MIT (`LICENSE`) and is not covered by the ODbL.
 
 The per-vessel `projection_land_conflict` flags that the API serves are produced from this database; the
-map footer and `/docs` carry the OpenStreetMap attribution. The mask is approximate (coastline detail,
-islets thinner than the 100 m sampling step, and port areas can be wrong), and the flags are not for
+map footer and `/docs` carry the OpenStreetMap attribution. The mask is approximate (a cell is land only when its centre is inside a polygon, so islets smaller
+than a cell, about 110 m x 55 m at 60°N, can be absent; thin features can fall between the 100 m path
+samples; port areas can be wrong), and the flags are not for
 navigation. Whether publishing the flags as a Produced Work needs more than attribution is the repository
 owner's call; this notice is not legal advice.

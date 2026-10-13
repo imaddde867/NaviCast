@@ -16,6 +16,7 @@ function load() {
     let v = 0;
     for (let shift = 0; ; shift += 7) {
       const b = bytes[p++];
+      if (b === undefined) throw new Error('land_mask data truncated');
       v += (b & 0x7f) * 2 ** shift;
       if (b < 0x80) return v;
     }
@@ -27,6 +28,7 @@ function load() {
     while (n-- > 0) out.push(at += varint());
   }
   rowStart[ROWS] = out.length;
+  if (p !== bytes.length) throw new Error('land_mask data has trailing bytes');
   bounds = Int32Array.from(out);
 }
 
@@ -38,9 +40,15 @@ export function isLand(lat, lon) {
   const r = Math.floor((north - lat) / CELL);
   const c = Math.floor((lon - west) / CELL);
   if (!(r >= 0 && r < ROWS && c >= 0 && c < COLS)) return null; // also rejects NaN
-  let crossings = 0;
-  for (let i = rowStart[r]; i < rowStart[r + 1] && bounds[i] <= c; i++) crossings++;
-  return (crossings & 1) === 1;
+  // Boundaries are ascending within a row: count those <= c with a binary search (odd = land).
+  let lo = rowStart[r];
+  let hi = rowStart[r + 1];
+  const first = lo;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (bounds[mid] <= c) lo = mid + 1; else hi = mid;
+  }
+  return ((lo - first) & 1) === 1;
 }
 
 // First sampled land cell along the segment. Returns { conflict, clear } where
@@ -48,7 +56,7 @@ export function isLand(lat, lon) {
 // leaves the mask area before any land sample (unknown, never reported as clear),
 // and clear is the fraction (0..1) of the segment up to the last water sample before land.
 // ponytail: point sampling every stepMeters; islets thinner than the step can be missed.
-function scan(lat1, lon1, lat2, lon2, stepMeters) {
+function scan(lat1, lon1, lat2, lon2, stepMeters = 100) {
   if (isLand(lat1, lon1) !== false) return { conflict: null, clear: null };
   const dy = (lat2 - lat1) * 111111;
   const dx = (lon2 - lon1) * 111111 * Math.cos((lat1 + lat2) / 2 * Math.PI / 180);
@@ -71,5 +79,8 @@ export function pathHitsLand(lat1, lon1, lat2, lon2, stepMeters = 100) {
 export function clearUntilFraction(lat1, lon1, lat2, lon2, stepMeters = 100) {
   return scan(lat1, lon1, lat2, lon2, stepMeters).clear;
 }
+
+// One scan for both flags: the Worker needs conflict and clear fraction from the same pass.
+export { scan as scanPath };
 
 export const maskInfo = { bbox: mask.bbox, cell_deg: CELL, cols: COLS, rows: ROWS, licence: mask.licence };
