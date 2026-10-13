@@ -27,10 +27,10 @@ Screenshot review: `docs/dashboard.png` shows explicitly synthetic demo position
 
 ## Local collector CPU probe
 
-Fetch a raw Digitraffic locations response to an untracked file outside the repo, then run:
+Fetch a raw Digitraffic locations response (and optionally the `/api/ais/v1/vessels` metadata array) to untracked files outside the repo, then run:
 
 ```bash
-node scripts/baseline/collector_cpu.mjs /path/to/cloudflare/collector.mjs /tmp/navicast-locations.json
+node scripts/baseline/collector_cpu.mjs /path/to/cloudflare/collector.mjs /tmp/navicast-locations.json /tmp/navicast-vessels.json
 ```
 
-The module can come from the PR #30 checkout. The probe includes parsing, record serialization and gzip, with a fake in-memory D1 binding (no network, no real D1); it checks the gzip header and row count. It reports dated CPU and elapsed measurements with a fixture checksum. Local Node results cannot establish compliance with Workers Free CPU accounting. The daily metadata invocation is not probed. Measure both crons after the owner deploys; do not infer approval to deploy or upgrade plans. Raw input must not be committed.
+The module can come from the PR #30 checkout. The probe includes parsing, record serialization and gzip, with a fake in-memory D1 binding (no network, no real D1); it checks the gzip header and row count. It reports dated CPU and elapsed measurements with a fixture checksum. Local Node results cannot establish compliance with Workers Free CPU accounting. The metadata cron is probed only when the third argument is given. Measure both crons after the owner deploys; do not infer approval to deploy or upgrade plans. Raw input must not be committed.
