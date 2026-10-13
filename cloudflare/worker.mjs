@@ -1,7 +1,14 @@
 import countries from './countries.json' with { type: 'json' };
 import { scanPath } from './landmask.mjs';
+import { collectMetadata, collectSnapshot } from './collector.mjs';
 
 const UPSTREAM = 'https://meri.digitraffic.fi/api/ais/v1/locations';
+const VESSELS_UPSTREAM = 'https://meri.digitraffic.fi/api/ais/v1/vessels';
+// Must match triggers.crons in wrangler.jsonc (tests/collector.test.mjs checks this).
+export const SNAPSHOT_CRON = '* * * * *';
+export const METADATA_CRON = '10 0 * * *';
+const HEALTH_MAX_AGE_MS = 5 * 60 * 1000;
+const HEALTH_MAX_DATA_AGE_MS = 10 * 60 * 1000;
 const HORIZON_MS = 30 * 60 * 1000;
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const NAV_STATUS = [
@@ -86,7 +93,8 @@ function normalize(features, fetchedAt) {
   return [...vessels.values()].sort((a, b) => b.current_timestamp.localeCompare(a.current_timestamp));
 }
 
-async function loadSnapshot() {
+// Fetches one upstream JSON document with the shared 8 s timeout, redirect refusal and 2 MiB cap.
+async function fetchJson(upstream) {
   const controller = new AbortController();
   let reader;
   let timer;
@@ -99,7 +107,7 @@ async function loadSnapshot() {
   });
   try {
     return await Promise.race([timeout, (async () => {
-      const response = await fetch(UPSTREAM, {
+      const response = await fetch(upstream, {
         headers: { 'Accept-Encoding': 'gzip', 'Digitraffic-User': 'NaviCast/imadlab.com' },
         signal: controller.signal,
         redirect: 'manual',
@@ -123,16 +131,30 @@ async function loadSnapshot() {
         chunks.push(decoder.decode(value, { stream: true }));
       }
       chunks.push(decoder.decode());
-      const payload = JSON.parse(chunks.join(''));
-      if (payload?.type !== 'FeatureCollection' || !Array.isArray(payload.features)) {
-        throw new Error('Invalid upstream schema');
-      }
-      const fetchedAt = Date.now();
-      return { fetched_at: fetchedAt, vessels: normalize(payload.features, fetchedAt) };
+      return { payload: JSON.parse(chunks.join('')), fetched_at: Date.now() };
     })()]);
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function loadRawSnapshot() {
+  const { payload, fetched_at } = await fetchJson(UPSTREAM);
+  if (payload?.type !== 'FeatureCollection' || !Array.isArray(payload.features)) {
+    throw new Error('Invalid upstream schema');
+  }
+  return { fetched_at, source: UPSTREAM, updated_at: payload.dataUpdatedTime ?? null, features: payload.features };
+}
+
+export async function loadVesselMetadata() {
+  const { payload, fetched_at } = await fetchJson(VESSELS_UPSTREAM);
+  if (!Array.isArray(payload)) throw new Error('Invalid upstream schema');
+  return { fetched_at, source: VESSELS_UPSTREAM, updated_at: null, vessels: payload };
+}
+
+async function loadSnapshot() {
+  const raw = await loadRawSnapshot();
+  return { fetched_at: raw.fetched_at, vessels: normalize(raw.features, raw.fetched_at) };
 }
 
 async function snapshot(url, ctx) {
@@ -193,18 +215,39 @@ function csv(vessels) {
   return [fields.join(','), ...vessels.map(vessel => fields.map(field => cell(vessel[field])).join(','))].join('\r\n') + '\r\n';
 }
 
+// Reads exactly one row through the primary-key index (newest 'ais/' key), never MAX() over the table,
+// so a health poll costs a couple of rows read against D1's 5M/day free quota. Exposes only ok/age_s.
+// 503 when collection stopped (fetched_at old) or the upstream froze (data_updated_at old while the
+// collector keeps fetching). A null or unparseable data_updated_at is not a failure by itself.
+async function health(env) {
+  try {
+    const row = await env.AIS_ARCHIVE_DB.prepare(
+      "SELECT fetched_at, data_updated_at FROM archive_objects WHERE key >= 'ais/' AND key < 'ais0' ORDER BY key DESC LIMIT 1",
+    ).first();
+    if (!Number.isFinite(row?.fetched_at)) return json({ ok: false }, 503);
+    const now = Date.now();
+    const age = now - row.fetched_at;
+    const dataTime = row.data_updated_at == null ? NaN : Date.parse(row.data_updated_at);
+    const ok = age <= HEALTH_MAX_AGE_MS && !(now - dataTime > HEALTH_MAX_DATA_AGE_MS);
+    return json({ ok, age_s: Math.round(age / 1000) }, ok ? 200 : 503);
+  } catch (error) {
+    console.error('health check failed', error);
+    return json({ ok: false }, 503);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method !== 'GET') return json({ detail: 'Method not allowed' }, 405, { Allow: 'GET' });
     if (url.pathname === '/meta') return json({ mode: 'live', prediction_method: 'dead_reckoning', prediction_horizon_minutes: 30, observation_stale_after_seconds: 300 });
-    if (url.pathname === '/docs') return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>NaviCast API</title><main><h1>NaviCast live API</h1><p>Digitraffic AIS observations in the Baltic region, cached for up to 30 seconds. Only observations from the last 30 minutes are returned. Constant speed and course projections target 30 minutes after the source observation; unavailable motion produces no projection. <code>projection_land_conflict</code> is true when the straight-line projection crosses land in an OpenStreetMap coastline mask (<code>projection_clear_until_fraction</code> is then the fraction of the path before the coast), false when no land was found along it inside the mask area (9–31°E, 53.5–66°N), and null when it cannot be resolved: no projection, a start position on mapped land, or a path that leaves the mask area before reaching land (positions outside the mask are unknown, not assumed to be water). The mask is approximate: the path is sampled every 100 m, inland lakes count as land, and islets smaller than a 0.001° grid cell can be absent, so a clear flag is not a guarantee. The projection itself is never altered and the flags are not for navigation.</p><ul><li><a href="/vessels?limit=500">GET /vessels</a>: optional mmsi, from_time, to_time, limit (1–1000, default 100). ISO dates use UTC unless an offset is supplied. Time filters select the current snapshot, with a two-hour default range.</li><li>GET /vessels/{MMSI}: one vessel, or 404.</li><li><a href="/vessels/download?format=csv">GET /vessels/download</a>: format=json|csv, with the same MMSI and time filters, up to 10000 rows.</li><li><a href="/meta">GET /meta</a>: mode and prediction horizon.</li><li><a href="/health">GET /health</a>: upstream availability (503 when unavailable).</li></ul><p>The edge API uses no historical database or trained model. Ship type is unknown in the location feed. Upstream failures return 503.</p><p>Source: <a href="https://www.digitraffic.fi/en/marine-traffic/">Fintraffic / digitraffic.fi</a>, license <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Observations are filtered and normalized; constant-course estimates are added. Data and estimates are not for navigation. Coastline flags: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, ODbL.</p></main></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    if (url.pathname === '/docs') return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>NaviCast API</title><main><h1>NaviCast live API</h1><p>Digitraffic AIS observations in the Baltic region, cached for up to 30 seconds. Only observations from the last 30 minutes are returned. Constant speed and course projections target 30 minutes after the source observation; unavailable motion produces no projection. <code>projection_land_conflict</code> is true when the straight-line projection crosses land in an OpenStreetMap coastline mask (<code>projection_clear_until_fraction</code> is then the fraction of the path before the coast), false when no land was found along it inside the mask area (9–31°E, 53.5–66°N), and null when it cannot be resolved: no projection, a start position on mapped land, or a path that leaves the mask area before reaching land (positions outside the mask are unknown, not assumed to be water). The mask is approximate: the path is sampled every 100 m, inland lakes count as land, and islets smaller than a 0.001° grid cell can be absent, so a clear flag is not a guarantee. The projection itself is never altered and the flags are not for navigation.</p><ul><li><a href="/vessels?limit=500">GET /vessels</a>: optional mmsi, from_time, to_time, limit (1–1000, default 100). ISO dates use UTC unless an offset is supplied. Time filters select the current snapshot, with a two-hour default range.</li><li>GET /vessels/{MMSI}: one vessel, or 404.</li><li><a href="/vessels/download?format=csv">GET /vessels/download</a>: format=json|csv, with the same MMSI and time filters, up to 10000 rows.</li><li><a href="/meta">GET /meta</a>: mode and prediction horizon.</li><li><a href="/health">GET /health</a>: archive freshness, 200 when the newest archived AIS snapshot is under five minutes old, otherwise 503.</li></ul><p>The edge API uses no historical database or trained model. Ship type is unknown in the location feed. Upstream failures return 503.</p><p>Source: <a href="https://www.digitraffic.fi/en/marine-traffic/">Fintraffic / digitraffic.fi</a>, license <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Observations are filtered and normalized; constant-course estimates are added. Data and estimates are not for navigation. Coastline flags: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, ODbL.</p></main></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     const detailMatch = /^\/vessels\/([^/]+)$/.exec(url.pathname);
     const download = url.pathname === '/vessels/download';
-    const health = url.pathname === '/health';
-    if (url.pathname !== '/vessels' && !detailMatch && !health) return env.ASSETS.fetch(request);
+    if (url.pathname === '/health') return health(env);
+    if (url.pathname !== '/vessels' && !detailMatch) return env.ASSETS.fetch(request);
     try {
-      const query = health ? {} : download || !detailMatch ? filters(url.searchParams)
+      const query = download || !detailMatch ? filters(url.searchParams)
         : { mmsi: integer(detailMatch[1], 'vessel_id'), start: null, end: null };
       const format = url.searchParams.get('format') ?? 'json';
       if (download && !['json', 'csv'].includes(format)) throw { status: 400, detail: "Format must be 'json' or 'csv'" };
@@ -212,7 +255,6 @@ export default {
         : Math.min(1000, Math.max(1, url.searchParams.has('limit') ? integer(url.searchParams.get('limit'), 'limit') : 100));
       const result = await snapshot(url, ctx);
       const now = Date.now();
-      if (health) return json({ status: 'healthy', mode: 'live', upstream: 'available', time: new Date(now).toISOString(), version: '1.0.0' });
       const vessels = result.vessels.filter(vessel => {
         const time = Date.parse(vessel.current_timestamp);
         return time > now - HORIZON_MS && time <= now && (query.mmsi === null || vessel.vessel_id === query.mmsi)
@@ -229,8 +271,13 @@ export default {
       return json(vessels);
     } catch (error) {
       if (error.status === 400 || error.status === 422) return json({ detail: error.detail }, error.status);
-      if (health) return json({ status: 'unhealthy', mode: 'live', upstream: 'unavailable', time: new Date().toISOString(), version: '1.0.0' }, 503);
       return json({ detail: 'AIS upstream unavailable' }, 503);
     }
+  },
+  // Awaited, not ctx.waitUntil: a rejection must fail the cron run so it shows in the cron status.
+  async scheduled(event, env) {
+    if (event.cron === SNAPSHOT_CRON) return collectSnapshot(env, event.scheduledTime, loadRawSnapshot);
+    if (event.cron === METADATA_CRON) return collectMetadata(env, event.scheduledTime, loadVesselMetadata);
+    throw new Error('Unknown cron');
   },
 };

@@ -1,11 +1,45 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import worker from '../cloudflare/worker.mjs';
+import worker, { loadRawSnapshot } from '../cloudflare/worker.mjs';
+import { fakeD1 } from './fake_d1.mjs';
 import { isLand, pathHitsLand, clearUntilFraction, maskInfo } from '../cloudflare/landmask.mjs';
 
 const now = Date.now();
 const sourceTime = now - 60_000;
 const iso = value => new Date(value).toISOString();
+
+test('shared raw loader preserves source features and fetched_at', async t => {
+  const feature = { type: 'Feature', properties: { mmsi: 230123456, sog: 102.3, cog: 360, heading: 511, rot: -128 }, geometry: { type: 'Point', coordinates: [24, 60] } };
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ type: 'FeatureCollection', dataUpdatedTime: 'source-time', features: [feature] }));
+  const snapshot = await loadRawSnapshot();
+  assert.deepEqual(snapshot.features, [feature]);
+  assert.equal(snapshot.source, 'https://meri.digitraffic.fi/api/ais/v1/locations');
+  assert.equal(snapshot.updated_at, 'source-time');
+  assert.ok(Number.isFinite(snapshot.fetched_at));
+  assert.deepEqual([snapshot.features[0].properties.sog, snapshot.features[0].properties.cog,
+    snapshot.features[0].properties.heading, snapshot.features[0].properties.rot], [102.3, 360, 511, -128]);
+});
+
+test('shared raw loader validates upstream status, schema, declared length, and streamed size', async t => {
+  const oversizedBody = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(2 * 1024 * 1024));
+      controller.enqueue(new Uint8Array(1));
+      controller.close();
+    },
+  });
+  const responses = [
+    new Response('down', { status: 503 }),
+    Response.json({ type: 'Feature', features: [] }),
+    new Response('{}', { headers: { 'Content-Length': String(2 * 1024 * 1024 + 1) } }),
+    new Response(oversizedBody),
+  ];
+  t.mock.method(globalThis, 'fetch', async () => responses.shift());
+  await assert.rejects(loadRawSnapshot(), /Invalid upstream response/);
+  await assert.rejects(loadRawSnapshot(), /Invalid upstream schema/);
+  await assert.rejects(loadRawSnapshot(), /Invalid upstream response/);
+  await assert.rejects(loadRawSnapshot(), /Upstream body too large/);
+});
 
 function feature(mmsi = 230123456, properties = {}, coordinates = [24, 60]) {
   return {
@@ -36,7 +70,7 @@ function harness(t, features = [feature()], upstream) {
   const env = { ASSETS: { async fetch() { return new Response('static page'); } } };
   const ctx = { waitUntil(promise) { pending.push(promise); } };
   return {
-    calls, entries, pending,
+    calls, entries, pending, env,
     async request(path = '/vessels', method = 'GET') {
       return worker.fetch(new Request(`https://navicast.test${path}`, { method }), env, ctx);
     },
@@ -190,7 +224,7 @@ test('CSV and JSON exports use the same filters and known AIS fields', async t =
 test('all query variants reuse one 30-second snapshot cache', async t => {
   const h = harness(t);
   for (const path of ['/vessels?limit=500', '/vessels?mmsi=0', '/vessels/230123456',
-    '/vessels/download?format=csv', '/health']) {
+    '/vessels/download?format=csv']) {
     assert.equal((await h.request(path)).status, 200);
   }
   await Promise.all(h.pending);
@@ -271,7 +305,7 @@ test('upstream timeout aborts after eight seconds', async t => {
   assert.equal(signal.aborted, true);
 });
 
-test('metadata is live, health reports upstream availability, docs serve HTML, and other routes use assets', async t => {
+test('metadata is live, docs serve HTML, and other routes use assets', async t => {
   const h = harness(t);
   const meta = await h.request('/meta');
   assert.equal(meta.status, 200);
@@ -286,13 +320,88 @@ test('metadata is live, health reports upstream availability, docs serve HTML, a
   const assets = await h.request('/index.html');
   assert.equal(await assets.text(), 'static page');
   assert.equal(h.calls.length, 0);
-  const health = await h.request('/health');
-  assert.equal(health.status, 200);
-  assert.equal((await health.json()).upstream, 'available');
-  const down = harness(t, [], () => new Response('', { status: 503 }));
-  const unhealthy = await down.request('/health');
-  assert.equal(unhealthy.status, 503);
-  assert.equal((await unhealthy.json()).upstream, 'unavailable');
+});
+
+const AGE_MS = ms => Date.now() - ms;
+function archived(db, ageMs, key = 'ais/2026/10/13/08/05.ndjson.gz', dataAgeMs = null) {
+  db.rows.set(key, {
+    key, kind: key.startsWith('ais') ? 'ais' : 'meta', fetched_at: AGE_MS(ageMs),
+    data_updated_at: dataAgeMs === null ? null : new Date(AGE_MS(dataAgeMs)).toISOString(),
+  });
+}
+
+test('/health is 200 with ok and age_s when the newest AIS row is under five minutes old', async t => {
+  const h = harness(t);
+  h.env.AIS_ARCHIVE_DB = fakeD1();
+  archived(h.env.AIS_ARCHIVE_DB, 10 * 60_000, 'ais/2026/10/13/07/55.ndjson.gz');
+  archived(h.env.AIS_ARCHIVE_DB, 30_000);
+  archived(h.env.AIS_ARCHIVE_DB, 1_000, 'meta/2026/10/13.json.gz');
+  const response = await h.request('/health');
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  const body = await response.json();
+  assert.deepEqual(Object.keys(body).sort(), ['age_s', 'ok']);
+  assert.equal(body.ok, true);
+  assert.ok(body.age_s >= 29 && body.age_s <= 35, `age_s ${body.age_s}`);
+  assert.equal(h.calls.length, 0, 'health does not touch the live upstream or its cache');
+  const { queries } = h.env.AIS_ARCHIVE_DB;
+  assert.equal(queries.length, 1);
+  assert.match(queries[0].sql, /ORDER BY key DESC LIMIT 1$/);
+  assert.doesNotMatch(queries[0].sql, /MAX\(|COUNT\(/i);
+});
+
+test('/health is 503 when the newest AIS row is stale, even with a fresh metadata row', async t => {
+  const h = harness(t);
+  h.env.AIS_ARCHIVE_DB = fakeD1();
+  archived(h.env.AIS_ARCHIVE_DB, 6 * 60_000);
+  archived(h.env.AIS_ARCHIVE_DB, 1_000, 'meta/2026/10/13.json.gz');
+  const response = await h.request('/health');
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  const body = await response.json();
+  assert.deepEqual(Object.keys(body).sort(), ['age_s', 'ok']);
+  assert.equal(body.ok, false);
+  assert.ok(body.age_s >= 359);
+});
+
+test('/health 503 on a frozen upstream, but null or unparseable data_updated_at alone is not a failure', async t => {
+  const status = async (...args) => {
+    const h = harness(t);
+    h.env.AIS_ARCHIVE_DB = fakeD1();
+    archived(h.env.AIS_ARCHIVE_DB, ...args);
+    const response = await h.request('/health');
+    return [response.status, await response.json()];
+  };
+  const key = 'ais/2026/10/13/08/05.ndjson.gz';
+  const fresh = await status(30_000, key, 2 * 60_000);
+  assert.equal(fresh[0], 200);
+  assert.equal(fresh[1].ok, true);
+  const frozen = await status(30_000, key, 11 * 60_000);
+  assert.equal(frozen[0], 503);
+  assert.deepEqual(Object.keys(frozen[1]).sort(), ['age_s', 'ok']);
+  assert.equal(frozen[1].ok, false);
+  assert.ok(frozen[1].age_s <= 35, 'fetched_at is fresh; only the data is old');
+  assert.equal((await status(30_000, key, null))[0], 200);
+  const h = harness(t);
+  h.env.AIS_ARCHIVE_DB = fakeD1();
+  h.env.AIS_ARCHIVE_DB.rows.set(key, { key, kind: 'ais', fetched_at: Date.now() - 1000, data_updated_at: 'not a date' });
+  assert.equal((await h.request('/health')).status, 200);
+});
+
+test('/health is 503 with only ok:false when the archive is empty or D1 fails', async t => {
+  t.mock.method(console, 'error', () => {});
+  const empty = harness(t);
+  empty.env.AIS_ARCHIVE_DB = fakeD1();
+  archived(empty.env.AIS_ARCHIVE_DB, 1_000, 'meta/2026/10/13.json.gz');
+  const failing = harness(t);
+  failing.env.AIS_ARCHIVE_DB = fakeD1({ fail: new Error('secret D1 internals') });
+  const unbound = harness(t);
+  for (const h of [empty, failing, unbound]) {
+    const response = await h.request('/health');
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
+    assert.deepEqual(await response.json(), { ok: false });
+  }
 });
 
 test('non-GET API requests reject with 405 without upstream work', async t => {
