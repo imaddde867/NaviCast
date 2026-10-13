@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "navicast",
+  "account_id": "a9b21695a21bf07980d486637f1a5a6e",
+  "workers_dev": false,
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-10-13",
+  "assets": {
+    "directory": "./static",
+    "binding": "ASSETS"
+  },
+  "routes": [
+    { "pattern": "navicast.imadlab.com", "custom_domain": true }
+  ],
+  "observability": { "enabled": true }
+}

@@ -29,7 +29,9 @@ jobs:
           node-version: '22'
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q
-      - run: node --test tests/frontend.test.cjs
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run check:deploy
       - run: bash -n start_navicast.sh
       - run: docker compose config --quiet
       - run: docker build -t navicast-check .

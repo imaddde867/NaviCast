@@ -4,6 +4,25 @@ NaviCast is a FastAPI and Leaflet vessel map with a live AIS pipeline and a loca
 
 ![NaviCast synthetic demo: Baltic vessel map and constant-course projections](docs/dashboard.png)
 
+## Public live map
+
+The hosted application is deployed at <https://navicast.imadlab.com> using Cloudflare Workers. It serves this dashboard and reads current Digitraffic AIS REST snapshots, cached for 30 seconds per Cloudflare location. Vessel timestamps always refer to the original AIS observation; the browser flags stale observations. Forecasts remain constant-course estimates.
+
+The public gateway stores no vessel history and uses no database credentials. The optional MQTT/PostgreSQL pipeline below remains available for local collection and research.
+
+To develop or redeploy the hosted gateway:
+
+```bash
+npm ci
+npm test
+npm run check:deploy
+npm run dev
+# After Cloudflare authentication:
+npm run deploy
+```
+
+`wrangler.jsonc` contains the Worker name and custom domain. Deployment changes only `navicast.imadlab.com`; the main portfolio stays on its existing host.
+
 ## Run the demo
 
 With Docker:
