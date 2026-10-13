@@ -1,4 +1,6 @@
 from fastapi import FastAPI, HTTPException, Query, Response
+from pydantic import BaseModel, Field
+from typing import Literal
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from fastapi.staticfiles import StaticFiles
@@ -6,8 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 from logging.handlers import RotatingFileHandler
 import os
-import pandas as pd
+import csv
+import io
+from pathlib import Path
 import json
+import math
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 from datetime import datetime, timedelta, timezone
 from fastapi.responses import JSONResponse
@@ -30,7 +35,8 @@ logger = logging.getLogger("navicast.api")
 
 # Constants
 # Default database configuration
-DB_CONFIG = get_db_config()
+DEMO_MODE = os.getenv("NAVICAST_MODE", "live") == "demo"
+DB_CONFIG = {} if DEMO_MODE else get_db_config()
 
 # Map AIS navigation status codes to human-readable descriptions
 NAV_STATUS_MAP = {
@@ -82,6 +88,28 @@ SHIP_TYPE_MAP = {
     99: "Other"
 }
 
+class Vessel(BaseModel):
+    vessel_id: int = Field(gt=0, le=999999999)
+    current_latitude: float = Field(ge=-90, le=90)
+    current_longitude: float = Field(ge=-180, le=180)
+    current_timestamp: datetime
+    sog: Optional[float] = Field(default=None, ge=0, lt=102.3)
+    cog: Optional[float] = Field(default=None, ge=0, lt=360)
+    heading: Optional[float] = Field(default=None, ge=0, lt=360)
+    pos_acc: bool
+    nav_stat: Optional[int]
+    vessel_status: str
+    vessel_type: str
+    vessel_type_code: Optional[int]
+    country: Optional[str]
+    data_source: Literal["synthetic", "ais"]
+    prediction_method: Optional[Literal["dead_reckoning"]]
+    predicted_latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    predicted_longitude: Optional[float] = Field(default=None, ge=-180, le=180)
+    prediction_for_timestamp: Optional[datetime] = None
+    prediction_made_at: Optional[datetime] = None
+
+
 app = FastAPI(
     title="NAVICAST API",
     description="API for the NAVICAST vessel tracking and prediction system",
@@ -101,7 +129,8 @@ app.add_middleware(
 # Load MMSI to country mapping
 mmsi_country_map = {}
 try:
-    mmsi_country_map = pd.read_csv('mid_to_country.csv').set_index('MID')['Country'].to_dict()
+    with (Path(__file__).parent / 'mid_to_country.csv').open(newline='') as country_file:
+        mmsi_country_map = {int(row['MID']): row['Country'] for row in csv.DictReader(country_file)}
     logger.info(f"Loaded {len(mmsi_country_map)} MMSI country mappings")
 except Exception as e:
     logger.warning(f"Could not load MMSI country mappings: {e}")
@@ -144,19 +173,21 @@ def get_vessel_type(raw_json: Dict) -> tuple:
     if not raw_json or not isinstance(raw_json, dict):
         return vessel_type, vessel_type_code
         
-    props = raw_json.get('properties', {})
-    vessel_type_code = props.get('shipType')
-    
-    if vessel_type_code is not None:
-        # First try exact match
-        if vessel_type_code in SHIP_TYPE_MAP:
-            vessel_type = SHIP_TYPE_MAP[vessel_type_code]
-        else:
-            # Try category match (first digit * 10)
-            tens = (vessel_type_code // 10) * 10
-            if tens in SHIP_TYPE_MAP:
-                vessel_type = SHIP_TYPE_MAP[tens]
-    
+    props = raw_json.get('properties')
+    if not isinstance(props, dict):
+        return vessel_type, vessel_type_code
+    code = props.get('shipType')
+    if isinstance(code, bool):
+        return vessel_type, vessel_type_code
+    try:
+        vessel_type_code = int(code)
+        if str(vessel_type_code) != str(code) or not 0 <= vessel_type_code <= 99:
+            return vessel_type, None
+    except (TypeError, ValueError, OverflowError):
+        return vessel_type, None
+    vessel_type = SHIP_TYPE_MAP.get(vessel_type_code,
+                                  SHIP_TYPE_MAP.get((vessel_type_code // 10) * 10, "Unknown"))
+
     return vessel_type, vessel_type_code
 
 
@@ -191,6 +222,8 @@ def _resolve_time_bounds(
     elif not start_time and not end_time:
         return None, None
 
+    if start_time and end_time and start_time > end_time:
+        raise HTTPException(status_code=400, detail="from_time must be before to_time")
     return start_time, end_time
 
 
@@ -201,6 +234,12 @@ def _fetch_latest_vessels(
     limit: int
 ) -> List[Dict[str, Any]]:
     """Execute vessel query and return raw database rows."""
+    if DEMO_MODE:
+        from demo_data import sample_rows
+        return [row for row in sample_rows()
+                if (mmsi is None or row['vessel_id'] == mmsi)
+                and (start_time is None or row['current_timestamp'] >= start_time)
+                and (end_time is None or row['current_timestamp'] <= end_time)][:limit]
     conn = None
     try:
         conn = get_db_connection()
@@ -212,11 +251,11 @@ def _fetch_latest_vessels(
                     v.latitude AS current_latitude,
                     v.longitude AS current_longitude,
                     v.timestamp AS current_timestamp,
-                    (v.raw_json -> 'properties' ->> 'sog')::float AS sog,
-                    (v.raw_json -> 'properties' ->> 'cog')::float AS cog,
-                    (v.raw_json -> 'properties' ->> 'posAcc')::boolean AS pos_acc,
-                    (v.raw_json -> 'properties' ->> 'heading')::float AS heading,
-                    (v.raw_json -> 'properties' ->> 'navStat')::int AS nav_stat,
+                    v.raw_json -> 'properties' ->> 'sog' AS sog,
+                    v.raw_json -> 'properties' ->> 'cog' AS cog,
+                    v.raw_json -> 'properties' ->> 'posAcc' AS pos_acc,
+                    v.raw_json -> 'properties' ->> 'heading' AS heading,
+                    v.raw_json -> 'properties' ->> 'navStat' AS nav_stat,
                     v.raw_json,
                     p.predicted_latitude,
                     p.predicted_longitude,
@@ -236,7 +275,7 @@ def _fetch_latest_vessels(
             """
 
             params: List[Any] = []
-            if mmsi:
+            if mmsi is not None:
                 query += " AND v.vessel_id = %s"
                 params.append(mmsi)
 
@@ -275,13 +314,22 @@ def _load_raw_data(raw_json: Any) -> Dict[str, Any]:
     return {}
 
 
+def _motion_value(value, maximum):
+    try:
+        number = float(value)
+        return number if not isinstance(value, bool) and math.isfinite(number) and 0 <= number < maximum else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _format_vessel_row(row: Mapping[str, Any]) -> Dict[str, Any]:
     """Convert database row into API response structure."""
     raw_data = _load_raw_data(row.get('raw_json'))
     vessel_type, vessel_type_code = get_vessel_type(raw_data)
     vessel_country = get_country_from_mmsi(row.get('vessel_id'))
 
-    nav_stat = row.get('nav_stat')
+    nav_value = _motion_value(row.get('nav_stat'), 16)
+    nav_stat = int(nav_value) if nav_value is not None and nav_value.is_integer() else None
     vessel_status = NAV_STATUS_MAP.get(nav_stat, "Unknown") if nav_stat is not None else "Unknown"
 
     vessel_data = {
@@ -289,22 +337,28 @@ def _format_vessel_row(row: Mapping[str, Any]) -> Dict[str, Any]:
         "current_latitude": row.get('current_latitude'),
         "current_longitude": row.get('current_longitude'),
         "current_timestamp": row.get('current_timestamp').isoformat() if row.get('current_timestamp') else None,
-        "sog": float(row.get('sog')) if row.get('sog') is not None else 0.0,
-        "cog": float(row.get('cog')) if row.get('cog') is not None else 0.0,
-        "heading": float(row.get('heading')) if row.get('heading') is not None else None,
-        "pos_acc": bool(row.get('pos_acc')) if row.get('pos_acc') is not None else False,
+        "sog": _motion_value(row.get('sog'), 102.3),
+        "cog": _motion_value(row.get('cog'), 360),
+        "heading": _motion_value(row.get('heading'), 360),
+        "pos_acc": row.get('pos_acc') in (True, "true", "1"),
         "nav_stat": nav_stat,
         "vessel_status": vessel_status,
         "vessel_type": vessel_type,
         "vessel_type_code": vessel_type_code,
-        "country": vessel_country
+        "country": vessel_country,
+        "data_source": "synthetic" if DEMO_MODE else "ais",
+        "prediction_method": None
     }
 
     pred_lat = row.get('predicted_latitude')
     pred_lon = row.get('predicted_longitude')
 
-    if is_valid_prediction(pred_lat, pred_lon):
+    prediction_for = row.get('prediction_for_timestamp')
+    if (is_valid_prediction(pred_lat, pred_lon) and prediction_for
+            and prediction_for > datetime.now(timezone.utc)
+            and prediction_for == row['current_timestamp'] + timedelta(minutes=30)):
         vessel_data.update({
+            "prediction_method": "dead_reckoning",
             "predicted_latitude": float(pred_lat),
             "predicted_longitude": float(pred_lon),
             "prediction_for_timestamp": row.get('prediction_for_timestamp').isoformat() if row.get('prediction_for_timestamp') else None,
@@ -318,9 +372,9 @@ def _format_vessel_row(row: Mapping[str, Any]) -> Dict[str, Any]:
             "prediction_made_at": None
         })
 
-    return vessel_data
+    return Vessel(**vessel_data).model_dump(mode="json")
 
-@app.get("/vessels", response_model=List[Dict[str, Any]])
+@app.get("/vessels", response_model=List[Vessel])
 def get_vessels(
     mmsi: Optional[int] = Query(None, description="Filter by vessel MMSI"),
     from_time: Optional[str] = Query(None, description="Filter by time range (start time, ISO format)"),
@@ -357,14 +411,28 @@ def get_vessels(
         logger.exception("Error retrieving vessel data")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/meta")
+def metadata():
+    return {"mode": "demo" if DEMO_MODE else "live",
+            "prediction_method": "dead_reckoning", "prediction_horizon_minutes": 30}
+
+
 @app.get("/health")
 def health_check():
-    """API health check endpoint"""
-    return {
-        "status": "healthy",
-        "time": datetime.now(timezone.utc).isoformat(),
-        "version": app.version
-    }
+    if not DEMO_MODE:
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+        except Exception:
+            logger.exception("Database health check failed")
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        finally:
+            if conn:
+                conn.close()
+    return {"status": "healthy", "mode": "demo" if DEMO_MODE else "live",
+            "time": datetime.now(timezone.utc).isoformat(), "version": app.version}
 
 @app.get("/vessels/download")
 def download_vessels(
@@ -393,11 +461,15 @@ def download_vessels(
     if format == "csv":
         # Convert to CSV
         try:
-            df = pd.DataFrame(vessels)
-            csv_data = df.to_csv(index=False)
+            output = io.StringIO()
+            fields = list(vessels[0]) if vessels else ['vessel_id', 'current_latitude', 'current_longitude', 'current_timestamp']
+            writer = csv.DictWriter(output, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(vessels)
+            csv_data = output.getvalue()
             
             filename = "vessel_data.csv"
-            if mmsi:
+            if mmsi is not None:
                 filename = f"vessel_{mmsi}_data.csv"
                 
             headers = {
@@ -419,67 +491,22 @@ def download_vessels(
         return JSONResponse(content=vessels, headers=headers)
 
 
-@app.get("/vessels/{vessel_id}", response_model=Dict[str, Any])
+@app.get("/vessels/{vessel_id}", response_model=Vessel)
 def get_vessel(vessel_id: int):
     """Get detailed information about a specific vessel"""
-    conn = None
-    cur = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Query to get vessel details
-        query = """
-        SELECT 
-            a.vessel_id, 
-            a.latitude AS current_latitude, 
-            a.longitude AS current_longitude, 
-            a.timestamp AS current_timestamp,
-            COALESCE((a.raw_json -> 'properties' ->> 'sog')::float, 0.0) AS sog,
-            COALESCE((a.raw_json -> 'properties' ->> 'cog')::float, 0.0) AS cog,
-            COALESCE((a.raw_json -> 'properties' ->> 'posAcc')::boolean, false) AS pos_acc,
-            COALESCE((a.raw_json -> 'properties' ->> 'heading')::float, null) AS heading,
-            COALESCE((a.raw_json -> 'properties' ->> 'navStat')::int, null) AS nav_stat,
-            a.raw_json,
-            p.predicted_latitude, 
-            p.predicted_longitude, 
-            p.prediction_for_timestamp, 
-            p.prediction_made_at
-        FROM raw_ais_data a
-        LEFT JOIN LATERAL (
-            SELECT predicted_latitude, predicted_longitude,
-                   prediction_for_timestamp, prediction_made_at
-            FROM predictions
-            WHERE vessel_id = a.vessel_id
-            ORDER BY prediction_made_at DESC
-            LIMIT 1
-        ) p ON true
-        WHERE a.vessel_id = %s
-        ORDER BY a.timestamp DESC
-        LIMIT 1
-        """
-        cur.execute(query, (vessel_id,))
-        vessel = cur.fetchone()
-        
-        if not vessel:
-            raise HTTPException(status_code=404, detail=f"Vessel with ID {vessel_id} not found")
-
-        return _format_vessel_row(vessel)
-        
+        rows = _fetch_latest_vessels(vessel_id, None, None, 1)
+        if not rows:
+            raise HTTPException(status_code=404, detail="Vessel not found")
+        return _format_vessel_row(rows[0])
     except HTTPException:
         raise
     except Exception:
-        logger.exception("Error in get_vessel")
+        logger.exception("Error retrieving vessel details")
         raise HTTPException(status_code=500, detail="Internal server error")
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 # Serve the web interface (after API routes so the "/" mount does not shadow them)
-if os.path.isdir("static"):
-    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))

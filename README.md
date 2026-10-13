@@ -1,70 +1,66 @@
-# NAVICAST — Maritime Traffic Intelligence Platform
+# NaviCast
 
-Real-time AIS vessel tracking + 30-minute trajectory prediction (ML with dead-reckoning fallback) for the Baltic Sea. MQTT ingest (Digitraffic feed) → PostgreSQL → FastAPI → Leaflet map.
+NaviCast is a FastAPI and Leaflet vessel map with a live AIS pipeline and a local demo. The demo serves four synthetic Baltic vessel records and 30-minute dead-reckoning estimates. It does not need a database, AIS feed, or trained model.
 
-## Demo
+![NaviCast synthetic demo: Baltic vessel map and constant-course projections](docs/dashboard.png)
 
-No live deployment. Quickstart follows — run it locally and open http://localhost:8000, where the map shows vessels with predicted tracks.
+## Run the demo
 
-## Quickstart (reviewer path, no MQTT needed)
-
-```bash
-cp .env.example .env
-docker compose up
-```
-
-This starts `postgres:16` (schema + `seed.sql` sample rows auto-loaded) and the API (`python:3.11-slim`, `pip install -r requirements.txt`, `uvicorn api_server:app`). Then:
-
-- App: http://localhost:8000 (or `$PORT` if set: `${PORT:-8000}:8000`)
-- Seeded check: `curl localhost:8000/vessels` → 200 with sample vessels. No MQTT feed required.
-
-## Local setup (no Docker)
+With Docker:
 
 ```bash
-pip install -r requirements.txt
-cp .env.example .env   # set NAVICAST_DB_PASSWORD (required)
-sudo -u postgres psql -c "CREATE DATABASE ais_project;"
-sudo -u postgres psql -d ais_project -f schema.sql
-mkdir -p logs
-./start_navicast.sh
+docker compose up --build
 ```
 
-| Env var | Required | Default | Purpose |
-|---|---|---|---|
-| `NAVICAST_DB_PASSWORD` | yes | — | Postgres password (`config.get_db_config` raises without it) |
-| `NAVICAST_DB_NAME` / `NAVICAST_DB_USER` / `NAVICAST_DB_HOST` / `NAVICAST_DB_PORT` | no | `ais_project` / `postgres` / `localhost` / `5432` | DB connection |
-| `NAVICAST_CORS_ORIGINS` | no | `http://localhost:3000` | Comma-separated API CORS origins |
-| `NAVICAST_MODEL_PATH` | no | `vessel_prediction_model.pkl` | ML model file; missing → dead-reckoning fallback |
-| `PORT` | no | `8000` | API listen port (`api_server.py` reads it; also compose host mapping) |
+Open <http://localhost:8000>. The API is available at `/vessels`, `/vessels/download`, `/vessels/{id}`, `/meta`, and `/health`.
 
-Notebook extras: `pip install -r requirements-notebook.txt`. Dev tools: `pip install -r requirements-dev.txt`.
+Or run with Python 3.11+:
 
-## API
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.lock
+NAVICAST_MODE=demo python -m uvicorn api_server:app --host 127.0.0.1 --port 8000
+```
 
-| Endpoint | Description |
-|---|---|
-| `GET /vessels` | Latest position + prediction per vessel. Params: `mmsi`, `from_time`, `to_time`, `limit` (default 100) |
-| `GET /vessels/download` | Same data as JSON/CSV export |
-| `GET /vessels/{id}` | Detail for one vessel (MMSI) |
-| `GET /health` | Health check |
+## Run the live pipeline
 
-## Data
+The live profile starts PostgreSQL, the API, the Digitraffic MQTT client, and the prediction service. Copy `.env.example` to `.env`, set a local database password, then run:
 
-- **Volume**: ~50-200 messages/minute (~500 bytes each) from the Digitraffic AIS feed.
-- **Tables**: `raw_ais_data` (PK `vessel_id, timestamp`), `predictions` (one row per vessel, PK `vessel_id`; see `docs/data_architecture.md`).
-- **Retention**: raw data 24h by default; predictions expire 1h after `prediction_made_at` (`PREDICTION_TTL_HOURS = 1`).
-- Stale map markers: the frontend flags vessels whose AIS timestamp is older than the display threshold.
+```bash
+docker compose --profile live up --build postgres api mqtt predictor
+```
 
-## ML model
+The live API is at <http://localhost:8001> by default. Set `LIVE_PORT` to change its host port. For local live mode, initialize your PostgreSQL database with `schema.sql`, set `NAVICAST_MODE=live` and the matching database settings in `.env`, then run `./start_navicast.sh`. The launcher loads the local shell configuration and checks the database before starting services.
 
-Random Forest predicts positions 30 min ahead (median error ~11 m on test data); see `ML_Model.ipynb`. The service runs without the model file via dead reckoning.
+The demo is the default Compose service. The live command above names the live services explicitly. The example database password is for local development only.
 
-## Docs
+## Verify
 
-- `docs/data_architecture.md` — components, schema, TTL
-- `docs/data_management_plan.md` — collection, retention, ethics
-- `ML_Model.ipynb` — model analysis
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+node --test tests/frontend.test.cjs
+```
 
-## License
+For a running demo, `GET /meta` should report `mode: demo` and `prediction_method: dead_reckoning`; `GET /vessels` returns four records marked `data_source: synthetic`. In live mode, `/health` checks the database connection.
 
-MIT — see `LICENSE`. AIS data: Finnish Transport Agency (Digitraffic).
+## Data and limits
+
+- Demo positions and speeds are synthetic. Their timestamps are generated relative to the current time.
+- Predictions are straight-line dead-reckoning estimates for 30 minutes. They are illustrative and must not be used for navigation or safety decisions.
+- Live mode stores AIS data in PostgreSQL. Raw rows are cleaned up after 24 hours; expired projections are hidden immediately and stored predictions are cleaned up after one hour. Ingestion buffering is bounded and in memory: a prolonged database outage or process exit can lose observations.
+- The API has no authentication. Keep live deployments on a trusted network.
+- The map uses external Leaflet, icon, and tile services, so full map rendering needs browser network access.
+- `ML_Model.ipynb` and `docs/ML_Model_docs/` contain historical research artifacts. They are not part of serving, and their results are not validated product-performance claims.
+
+Optional database integration checks use `NAVICAST_TEST_DSN` pointing to a disposable PostgreSQL instance; they create session-local temporary tables. CI runs these checks with PostgreSQL 16.
+
+The runtime is pinned in `requirements.lock`. Regenerate it with `uv pip compile requirements.txt --universal --python-version 3.11 -o requirements.lock` after reviewing dependency updates.
+
+## Project files
+
+- `docs/data_architecture.md` — demo and live data flows
+- `docs/data_management_plan.md` — data fields, retention, and access limits
+- `ML_Model.ipynb` — historical model exploration
+- `LICENSE` — MIT license

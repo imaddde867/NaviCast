@@ -1,5 +1,6 @@
 import paho.mqtt.client as mqtt
 import json
+import math
 import psycopg2
 import threading
 from datetime import datetime, timezone
@@ -26,7 +27,6 @@ logger = logging.getLogger(__name__)
 # Constants
 BATCH_SIZE = 10
 APP_NAME = 'Navicast/MQTT_Client_1.0'
-STREAM_DURATION = 3600 * 24  # 24 hours
 
 # Database configuration
 DB_CONFIG = get_db_config()
@@ -37,174 +37,145 @@ batch_lock = threading.Lock()
 
 
 def _normalize_timestamp_ms(raw):
-    """Normalize a vessel time value to epoch milliseconds.
-
-    Values >1e12 are already ms; smaller numeric values are seconds (x1000).
-    # ponytail: 1e12 s/ms threshold breaks only for dates far outside the AIS
-    # epoch range (Sep 2001 in ms, year 33658 in s); switch to explicit unit
-    # flag from the feed if that ever matters.
-    """
+    """Normalize finite positive epoch seconds or milliseconds."""
+    if isinstance(raw, bool):
+        raise ValueError("Invalid vessel timestamp")
     try:
         value = float(raw)
-    except (TypeError, ValueError):
-        return int(time.time() * 1000)
-    if value > 1e12:
-        return int(value)
-    return int(value * 1000)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid vessel timestamp") from exc
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError("Invalid vessel timestamp")
+    # shortcut: timestamps before 2001 in milliseconds are ambiguous; use explicit feed units if needed.
+    return int(value if value >= 1e12 else value * 1000)
+
 
 def store_raw_data_batch(batch_data):
-    """Store a batch of vessel data in the database"""
+    """Commit valid observations; return False if the batch could not commit."""
     if not batch_data:
-        return
-        
-    logger.info(f"Processing batch with {len(batch_data)} records")
-    
+        return True
+
     conn = None
     cur = None
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
-        
         inserted_count = 0
         for vessel in batch_data:
             try:
-                if "lat" not in vessel or "lon" not in vessel:
-                    continue
-
-                # Extract and validate vessel data
-                vessel_id = int(vessel.get("mmsi", 0))
-                latitude = vessel["lat"]
-                longitude = vessel["lon"]
+                mmsi = vessel["mmsi"]
+                if isinstance(mmsi, bool) or not str(mmsi).isdigit():
+                    raise ValueError("Invalid MMSI")
+                vessel_id = int(mmsi)
+                if not 0 < vessel_id <= 999999999:
+                    raise ValueError("Invalid MMSI")
+                latitude, longitude = vessel["lat"], vessel["lon"]
+                if (any(isinstance(value, bool) or not isinstance(value, (int, float))
+                        or not math.isfinite(value) for value in (latitude, longitude))
+                        or not -90 <= latitude <= 90 or not -180 <= longitude <= 180):
+                    raise ValueError("Invalid vessel coordinates")
                 timestamp_ms = _normalize_timestamp_ms(vessel.get("time", time.time()))
-                timestamp_dt = datetime.fromtimestamp(timestamp_ms / 1000.0, tz=timezone.utc)
+                timestamp_dt = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
+                props = vessel.get("properties", {})
+                if not isinstance(props, dict):
+                    raise ValueError("Invalid vessel properties")
+                props = dict(props)
+                for name, limit in (("sog", 102.3), ("cog", 360), ("heading", 360)):
+                    value = props.get(name, vessel.get(name))
+                    # AIS uses 102.3, 360 and 511 as unavailable values; never invent motion.
+                    props[name] = (value if not isinstance(value, bool)
+                                   and isinstance(value, (int, float)) and math.isfinite(value)
+                                   and 0 <= value < limit else None)
+                nav_status = props.get("navStat", vessel.get("navStat"))
+                props["navStat"] = (nav_status if type(nav_status) is int and 0 <= nav_status <= 15 else None)
+                accuracy = props.get("posAcc", vessel.get("posAcc"))
+                props["posAcc"] = accuracy if isinstance(accuracy, bool) else None
+                raw_json = json.dumps({**vessel, "properties": props}, allow_nan=False)
+            except (KeyError, TypeError, ValueError, OverflowError) as exc:
+                logger.warning("Skipping invalid observation: %s", exc)
+                continue
 
-                # Ensure properties exist
-                if "properties" not in vessel:
-                    vessel["properties"] = {}
-
-                props = vessel["properties"]
-
-                # Set default properties if missing
-                for prop_name, default in [("sog", 0.0), ("cog", 0.0), ("heading", 0.0), ("posAcc", False)]:
-                    if prop_name not in props:
-                        props[prop_name] = vessel.get(prop_name, default)
-
-                # Validate property ranges
-                sog = props.get("sog", 0)
-                cog = props.get("cog", 0)
-                heading = props.get("heading", 0)
-
-                # Validate data ranges
-                if not isinstance(sog, (int, float)) or not (0 <= sog <= 50):
-                    logger.warning(f"Adjusting vessel {vessel_id} invalid sog: {sog} to 0")
-                    props["sog"] = 0
-
-                if not isinstance(cog, (int, float)) or not (0 <= cog <= 360):
-                    logger.warning(f"Adjusting vessel {vessel_id} invalid cog: {cog} to 0")
-                    props["cog"] = 0
-
-                if heading is not None and (not isinstance(heading, (int, float)) or not (0 <= heading <= 360)):
-                    logger.warning(f"Adjusting vessel {vessel_id} invalid heading: {heading} to 0")
-                    props["heading"] = 0
-
-                # Update vessel with corrected properties
-                vessel["properties"] = props
-                raw_json = json.dumps(vessel)
-
+            cur.execute("SAVEPOINT ais_row")
+            try:
                 cur.execute(
-                    "INSERT INTO raw_ais_data (vessel_id, latitude, longitude, timestamp, raw_json) VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                    "INSERT INTO raw_ais_data (vessel_id, latitude, longitude, timestamp, raw_json) "
+                    "VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
                     (vessel_id, latitude, longitude, timestamp_dt, raw_json)
                 )
                 inserted_count += cur.rowcount
-            except Exception as e:
-                logger.warning(f"Skipping vessel in batch due to error: {e}")
-                continue
-        
-        # Clean up old records (older than 24 hours)
+            except psycopg2.Error as exc:
+                cur.execute("ROLLBACK TO SAVEPOINT ais_row")
+                logger.warning("Skipping rejected observation for vessel %s: %s", vessel_id, exc)
+            finally:
+                cur.execute("RELEASE SAVEPOINT ais_row")
+
         cur.execute("DELETE FROM raw_ais_data WHERE timestamp < NOW() - INTERVAL '24 hours'")
-        
         conn.commit()
-        logger.info(f"Inserted {inserted_count} new records, cleaned up old records")
-        
-    except Exception as e:
-        logger.error(f"Database error: {e}")
+        logger.info("Inserted %s new records, cleaned up old records", inserted_count)
+        return True
+    except Exception as exc:
+        logger.error("Database batch failed; observations were not committed: %s", exc)
         if conn:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except psycopg2.Error:
+                logger.warning("Could not roll back a failed database connection")
+        return False
     finally:
         if cur:
             cur.close()
         if conn:
             conn.close()
 
+
+def _flush_batch():
+    """Retain a failed batch for the next flush attempt."""
+    with batch_lock:
+        if store_raw_data_batch(batch):
+            batch.clear()
+
+
 def on_connect(client, userdata, flags, rc, properties=None):
     """Callback when connected to MQTT broker"""
     if rc == 0:
         logger.info("Connected to MQTT Broker")
         # Subscribe to vessel topics
-        client.subscribe("vessels-v2/#", qos=1)
         client.subscribe("vessels-v2/+/location", qos=1)
-        client.subscribe("vessels-v2/status", qos=1)
         logger.info("Subscribed to vessel location topics")
     else:
         logger.error(f"Failed to connect, return code {rc}")
 
-def on_message(client, userdata, message, properties=None):
-    """Callback when message is received"""
-    global batch
-    
+def on_message(client, userdata, message):
+    """Queue location observations with bounded buffering during DB outages."""
     try:
-        payload = message.payload.decode('utf-8')
-        
-        # Parse JSON payload
-        try:
-            data = json.loads(payload)
-        except json.JSONDecodeError:
+        data = json.loads(message.payload.decode("utf-8"))
+        topic_parts = message.topic.split("/")
+        if (len(topic_parts) != 3 or topic_parts[0] != "vessels-v2"
+                or topic_parts[2] != "location" or not topic_parts[1].isdigit()
+                or not isinstance(data, dict) or "lat" not in data or "lon" not in data):
             return
-            
-        # Extract vessel ID from topic
-        topic_parts = message.topic.split('/')
-        if len(topic_parts) >= 2 and topic_parts[0] == "vessels-v2":
-            mmsi = topic_parts[1]
-            
-            try:
-                mmsi_int = int(mmsi)
-                # Only process valid MMSI numbers
-                if mmsi_int > 0 and isinstance(data, dict) and "lat" in data and "lon" in data:
-                    data["mmsi"] = mmsi
-                    logger.info(f"Received vessel data for MMSI {mmsi}: lat={data['lat']}, lon={data['lon']}")
-                    
-                    # Add to batch
-                    with batch_lock:
-                        batch.append(data)
-                        ready = len(batch) >= BATCH_SIZE
-                        to_flush = list(batch) if ready else None
-                        if ready:
-                            batch = []
+        data["mmsi"] = topic_parts[1]
+        with batch_lock:
+            if len(batch) >= BATCH_SIZE:
+                if not store_raw_data_batch(batch):
+                    logger.error("Batch buffer full; dropping incoming observation while database is unavailable")
+                    return
+                batch.clear()
+            batch.append(data)
+        if len(batch) >= BATCH_SIZE:
+            _flush_batch()
+    except (ValueError, UnicodeDecodeError) as exc:
+        logger.warning("Skipping malformed MQTT message: %s", exc)
 
-                    # Process batch when it reaches the threshold
-                    if ready:
-                        store_raw_data_batch(to_flush)
-            except ValueError:
-                # Not a numeric MMSI
-                pass
 
-    except Exception as e:
-        logger.error(f"Error processing message: {e}")
-
-def on_disconnect(client, userdata, rc, properties=None, reason=None):
-    """Callback when disconnected from MQTT broker"""
-    global batch
-    if rc != 0:
-        logger.warning(f"Unexpected disconnection. Reason code: {rc}")
+def on_disconnect(client, userdata, disconnect_flags, reason_code, properties):
+    """Paho VERSION2 callback; disconnect flags are separate from reason code."""
+    if reason_code != 0:
+        logger.warning("Unexpected disconnection. Reason code: %s", reason_code)
     else:
         logger.info("Disconnected from MQTT Broker")
-    
-    # Process any remaining batch items
-    with batch_lock:
-        to_flush = list(batch)
-        batch = []
-    if to_flush:
-        store_raw_data_batch(to_flush)
+    _flush_batch()
+
 
 def on_subscribe(client, userdata, mid, granted_qos, properties=None):
     """Callback when subscribed to a topic"""
@@ -212,7 +183,6 @@ def on_subscribe(client, userdata, mid, granted_qos, properties=None):
 
 def main():
     """Main function to run the MQTT client"""
-    global batch
     client = None
 
     try:
@@ -246,36 +216,28 @@ def main():
         client.connect(broker, port, keepalive=60)
         client.loop_start()
         
-        # Run for specified duration
-        logger.info(f"Starting the MQTT loop for {STREAM_DURATION/3600:.1f} hours")
-        start_time = time.time()
-        
+        logger.info("Starting continuous MQTT ingestion")
+        start_time = time.monotonic()
+        next_status = start_time + 300
         try:
-            while time.time() - start_time < STREAM_DURATION:
+            while True:
                 time.sleep(1)
-                
-                # Log status every 5 minutes
-                if int(time.time() - start_time) % 300 == 0:
-                    uptime_minutes = (time.time() - start_time) / 60
-                    logger.info(f"MQTT client uptime: {uptime_minutes:.1f} minutes")
+                now = time.monotonic()
+                if now >= next_status:
+                    logger.info("MQTT client uptime: %.1f minutes", (now - start_time) / 60)
+                    next_status = now + 300
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received")
-        
-        # Process any remaining items in batch
-        with batch_lock:
-            to_flush = list(batch)
-            batch = []
-        if to_flush:
-            logger.info(f"Processing remaining {len(to_flush)} items in batch")
-            store_raw_data_batch(to_flush)
 
     except Exception as e:
         logger.error(f"Error in main MQTT client: {e}")
+        raise
     finally:
         logger.info("Stopping MQTT client")
         if client is not None:
             client.loop_stop()
             client.disconnect()
+        _flush_batch()
 
 if __name__ == "__main__":
     main()

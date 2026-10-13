@@ -1,36 +1,62 @@
-# Reviewer boot path (no MQTT needed): cp .env.example .env && docker compose up
-# Then /vessels returns 200 with seeded rows.
 services:
+  demo:
+    build: .
+    environment:
+      NAVICAST_MODE: demo
+    ports:
+      - "127.0.0.1:${PORT:-8000}:8000"
+
   postgres:
     image: postgres:16
+    profiles: [live]
     environment:
       POSTGRES_DB: ${NAVICAST_DB_NAME:-ais_project}
       POSTGRES_USER: ${NAVICAST_DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${NAVICAST_DB_PASSWORD:?set NAVICAST_DB_PASSWORD in .env}
+      POSTGRES_PASSWORD: ${NAVICAST_DB_PASSWORD:-local-development-only}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      - ./seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${NAVICAST_DB_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${NAVICAST_DB_USER:-postgres} -d ${NAVICAST_DB_NAME:-ais_project}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   api:
-    image: python:3.11-slim
-    working_dir: /app
-    volumes:
-      - .:/app
-    env_file: .env
-    environment:
+    build: .
+    profiles: [live]
+    restart: unless-stopped
+    environment: &live-env
+      NAVICAST_MODE: live
       NAVICAST_DB_HOST: postgres
+      NAVICAST_DB_NAME: ${NAVICAST_DB_NAME:-ais_project}
+      NAVICAST_DB_USER: ${NAVICAST_DB_USER:-postgres}
+      NAVICAST_DB_PASSWORD: ${NAVICAST_DB_PASSWORD:-local-development-only}
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "${PORT:-8000}:8000"
-    command: sh -c "pip install -r requirements.txt && uvicorn api_server:app --host 0.0.0.0 --port 8000"
+      - "127.0.0.1:${LIVE_PORT:-8001}:8000"
+
+  mqtt:
+    build: .
+    profiles: [live]
+    restart: unless-stopped
+    environment: *live-env
+    command: python mqtt_client.py
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  predictor:
+    build: .
+    profiles: [live]
+    restart: unless-stopped
+    environment: *live-env
+    command: python prediction_service.py
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:

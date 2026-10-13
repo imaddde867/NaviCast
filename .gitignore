@@ -84,3 +84,9 @@ adjust_retention.sh
 deployment_*.txt
 bucket_policy.json
 .venv/
+
+# Local verification artifacts
+.playwright-cli/
+output/
+.pytest_cache/
+.superpowers/

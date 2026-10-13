@@ -25,7 +25,7 @@ BOUNDS = {
 }
 
 
-def get_db_config() -> Dict[str, str]:
+def get_db_config() -> Dict[str, str | int]:
     """Return database connection configuration, allowing environment overrides."""
     password = os.getenv("NAVICAST_DB_PASSWORD")
     if not password:
@@ -34,6 +34,7 @@ def get_db_config() -> Dict[str, str]:
         "dbname": os.getenv("NAVICAST_DB_NAME", _DEFAULT_DB_CONFIG["dbname"]),
         "user": os.getenv("NAVICAST_DB_USER", _DEFAULT_DB_CONFIG["user"]),
         "password": password,
+        "connect_timeout": 5,
         "host": os.getenv("NAVICAST_DB_HOST", _DEFAULT_DB_CONFIG["host"]),
         "port": os.getenv("NAVICAST_DB_PORT", _DEFAULT_DB_CONFIG["port"]),
     }

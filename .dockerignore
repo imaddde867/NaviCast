@@ -1,0 +1,10 @@
+.git
+.worktrees
+.venv
+.env
+*.pkl
+*.joblib
+logs
+__pycache__
+.pytest_cache
+output
