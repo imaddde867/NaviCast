@@ -81,7 +81,7 @@ function normalize(features, fetchedAt) {
   return [...vessels.values()].sort((a, b) => b.current_timestamp.localeCompare(a.current_timestamp));
 }
 
-async function loadSnapshot() {
+export async function loadRawSnapshot() {
   const controller = new AbortController();
   let reader;
   let timer;
@@ -122,12 +122,16 @@ async function loadSnapshot() {
       if (payload?.type !== 'FeatureCollection' || !Array.isArray(payload.features)) {
         throw new Error('Invalid upstream schema');
       }
-      const fetchedAt = Date.now();
-      return { fetched_at: fetchedAt, vessels: normalize(payload.features, fetchedAt) };
+      return { fetched_at: Date.now(), source: UPSTREAM, updated_at: payload.dataUpdatedTime ?? null, features: payload.features };
     })()]);
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function loadSnapshot() {
+  const raw = await loadRawSnapshot();
+  return { fetched_at: raw.fetched_at, vessels: normalize(raw.features, raw.fetched_at) };
 }
 
 async function snapshot(url, ctx) {
@@ -229,6 +233,6 @@ export default {
     }
   },
   scheduled(event, env, ctx) {
-    ctx.waitUntil(collectSnapshot(env));
+    ctx.waitUntil(collectSnapshot(env, event.scheduledTime, loadRawSnapshot));
   },
 };

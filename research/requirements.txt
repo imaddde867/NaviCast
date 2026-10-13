@@ -1,0 +1,4 @@
+# NumPy 2.3.3 supports the project's Python 3.11 CI runtime (PyPI metadata).
+numpy==2.3.3
+# Keep aligned with the repository's development test pin.
+pytest==8.3.5

@@ -1,10 +1,43 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import worker from '../cloudflare/worker.mjs';
+import worker, { loadRawSnapshot } from '../cloudflare/worker.mjs';
 
 const now = Date.now();
 const sourceTime = now - 60_000;
 const iso = value => new Date(value).toISOString();
+
+test('shared raw loader preserves source features and fetched_at', async t => {
+  const feature = { type: 'Feature', properties: { mmsi: 230123456, sog: 102.3, cog: 360, heading: 511, rot: -128 }, geometry: { type: 'Point', coordinates: [24, 60] } };
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ type: 'FeatureCollection', dataUpdatedTime: 'source-time', features: [feature] }));
+  const snapshot = await loadRawSnapshot();
+  assert.deepEqual(snapshot.features, [feature]);
+  assert.equal(snapshot.source, 'https://meri.digitraffic.fi/api/ais/v1/locations');
+  assert.equal(snapshot.updated_at, 'source-time');
+  assert.ok(Number.isFinite(snapshot.fetched_at));
+  assert.deepEqual([snapshot.features[0].properties.sog, snapshot.features[0].properties.cog,
+    snapshot.features[0].properties.heading, snapshot.features[0].properties.rot], [102.3, 360, 511, -128]);
+});
+
+test('shared raw loader validates upstream status, schema, declared length, and streamed size', async t => {
+  const oversizedBody = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(2 * 1024 * 1024));
+      controller.enqueue(new Uint8Array(1));
+      controller.close();
+    },
+  });
+  const responses = [
+    new Response('down', { status: 503 }),
+    Response.json({ type: 'Feature', features: [] }),
+    new Response('{}', { headers: { 'Content-Length': String(2 * 1024 * 1024 + 1) } }),
+    new Response(oversizedBody),
+  ];
+  t.mock.method(globalThis, 'fetch', async () => responses.shift());
+  await assert.rejects(loadRawSnapshot(), /Invalid upstream response/);
+  await assert.rejects(loadRawSnapshot(), /Invalid upstream schema/);
+  await assert.rejects(loadRawSnapshot(), /Invalid upstream response/);
+  await assert.rejects(loadRawSnapshot(), /Upstream body too large/);
+});
 
 function feature(mmsi = 230123456, properties = {}, coordinates = [24, 60]) {
   return {

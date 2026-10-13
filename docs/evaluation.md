@@ -1,45 +1,40 @@
 # Prediction evaluation data
 
-The hosted Worker is stateless, so it cannot say how accurate its projections are. A Cron Trigger (`* * * * *`) archives the raw Digitraffic AIS snapshot to R2 once a minute. `research/evaluate.py` joins observations at `t` and `t+h` offline and scores any predictor against what the vessel actually did.
+The hosted Worker is stateless and does not retain vessel history. This branch contains an undeployed archive collector and an experimental offline evaluator. No archive continuity or forecasting accuracy has been established.
 
-## Object layout
+## Archive prototype
 
-One gzipped NDJSON object per UTC minute: `ais/YYYY/MM/DD/HH/mm.ndjson.gz` in bucket `navicast-ais-archive` (binding `AIS_ARCHIVE`). A retry in the same minute overwrites the same key. Written by `cloudflare/collector.mjs`.
+The current prototype writes one gzipped NDJSON object per scheduled UTC minute to R2, keyed as `ais/YYYY/MM/DD/HH/mm.ndjson.gz` in `navicast-ais-archive` (binding `AIS_ARCHIVE`). The key comes from `event.scheduledTime`, so a delayed invocation does not move its data into the following minute. A retry of the same scheduled minute uses the same key. The gzip body has content type `application/gzip`.
 
-## Schema v1
+The collector reuses the Worker's validated raw snapshot loader. Its schema header contains `schema`, `fetched_at`, `source`, `count` and `data_updated_at`. Vessel rows contain `mmsi`, `lat`, `lon`, `timestampExternal`, `age_s`, `sog`, `cog`, `heading`, `rot`, `navStat`, `posAcc` and `raim`. Raw motion sentinels and stale observations are retained for offline filtering. Invalid vessel identifiers and positions are excluded; empty or malformed snapshots fail without writing an archive object. Scheduled failures are logged and propagated to Cloudflare.
 
-Line 1 is a header: `{"schema":1,"fetched_at":ISO,"source":URL,"count":N,"data_updated_at":ISO}`. Every other line is one vessel with raw upstream values:
+Source: [Fintraffic / digitraffic.fi](https://www.digitraffic.fi/en/marine-traffic/), license [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Archive rows select upstream fields and add observation age; evaluation outputs also carry attribution. Raw archive files and metadata must remain private and uncommitted. The proposed removal process in issue #7 remains an owner decision; publication of a contact address does not implement exclusion or deletion.
 
-`mmsi, lat, lon, timestampExternal (ms), age_s, sog, cog, heading, rot, navStat, posAcc, raim`
+## Storage and deployment gate
 
-Sentinels are kept (`sog` 102.3, `cog` 360, `heading` 511) and stale observations are kept (`age_s` says how old). Filtering is the reader's job. Vessels with an invalid MMSI or position are dropped. An empty or malformed upstream response writes nothing.
+The prototype R2 binding is not an approved storage decision. On 2026-10-13 the owner inspected R2 activation: the checkout explicitly uses the card on file, creates a renewable usage-billed subscription and permits payment-method preauthorization. Activation is therefore excluded under the no-card constraint. Prepare the D1 compressed-blob-per-minute fallback in [#8](https://github.com/imaddde867/NaviCast/issues/8), subject to confirming Workers Free before provisioning or deployment. No cloud resource has been created by this work.
 
-## Running the evaluation
+Free tiers only. Do not deploy until storage is chosen and provisioned by the owner. Do not add a lifecycle expiry rule: the proposed retention policy has no automatic age-based deletion. Offload, local backup, capacity limits and accepted removal requests require an approved operating procedure.
 
+For an owner-approved R2 deployment, the remaining steps are:
+
+- Owner creates the private archive bucket and verifies the account's plan and storage eligibility.
+- Run `npm ci`, `npm test` and `npm run check:deploy`; a dry-run validates the bundle, not bucket existence or free-tier CPU compliance.
+- Owner deploys and confirms minute objects decompress correctly and use scheduled-time keys.
+- Measure deployed CPU, including the daily metadata invocation once implemented. The local `scripts/baseline/collector_cpu.mjs` probe on main is a preliminary Node measurement only; it cannot establish Workers CPU compliance.
+- Verify daily metadata collection, collector freshness/health reporting, deliberate failure alerts, and archive continuity before declaring #9 complete. These are not implemented or verified by the pre-merge fixes alone.
+
+## Experimental evaluation
+
+```bash
+python -m pip install -r research/requirements.txt
+python research/make_synthetic.py /tmp/ais-demo
+python research/evaluate.py /tmp/ais-demo --json /tmp/navicast-evaluation.json
+python -m pytest research -q
 ```
-pip install numpy
-python research/make_synthetic.py /tmp/ais-demo          # optional fake data
-python research/evaluate.py /tmp/ais-demo --json out.json  # or a dir/glob of downloaded objects
-python -m pytest research -q                              # needs pytest too
-```
 
-Observations are deduplicated by `(mmsi, timestampExternal)`. For each observation with `0.5 <= sog < 102.3` and `0 <= cog < 360` the nearest later observation within +-60 s of `t+h` (h = 5, 10, 15, 30 min) is the truth. Predictors: `persistence` (last position) and `dead_reckoning` (same formula as the Worker, projected over the real elapsed time). Output is median, p90 and p95 error in metres per horizon, overall and by sog bucket (<2, 2-8, >=8 kn). `--split-by vessel|time` only prints the group assignment a future model split would use; vessel grouping keeps all of a vessel's observations in one fold.
+Observations are deduplicated by vessel identifier and source timestamp. Only valid motion records are scored. Source observation time, not collection time, drives matching. Persistence and dead reckoning are evaluated on the same matched rows, overall and by speed bucket; errors are reported in metres. No training split is implemented.
 
-## Limitations
+The evaluator remains a prototype: the current fixed truth-matching tolerance, projection over matched elapsed time, whole-archive memory use and lack of vessel-level confidence intervals do not satisfy the protocol and streaming requirements in [#16](https://github.com/imaddde867/NaviCast/issues/16), [#17](https://github.com/imaddde867/NaviCast/issues/17) and [#18](https://github.com/imaddde867/NaviCast/issues/18). Do not publish its results as validated accuracy claims. Do not split AIS rows randomly or use held-out target positions in prediction code. Scientific-method changes require a reviewed protocol before implementation.
 
-- The REST feed has at most about one position per vessel per minute, and only when the vessel transmits. Sparse tracks reduce `n` at long horizons.
-- Ship type is not in `/api/ais/v1/locations`. Type-stratified scoring needs the `/api/ais/v1/vessels` metadata endpoint, joined by MMSI.
-- Feed latency makes `fetched_at` later than the true observation time. Use `timestampExternal` for all time arithmetic.
-- Size: a live snapshot of 938 vessels was 167 KB as NDJSON and 29 KB gzipped, so about 42 MB per day and 1.3 GB per month (about 43,000 writes per month). Check against current R2 pricing before enabling.
-- The free Workers plan limits CPU time per invocation. Parsing, serializing and compressing ~1000 vessels is cheap but should be confirmed in the first runs under Workers observability.
-- `evaluate.py` holds all observations in memory. Fine for days of data; shard by date for months.
-
-## Owner steps before first deploy (NOT done)
-
-Nothing below has been run. The bucket does not exist. Create it explicitly first: `npm run check:deploy` is offline and passes without it, but how `wrangler deploy` treats a missing bucket varies by Wrangler version.
-
-1. `npx wrangler r2 bucket create navicast-ais-archive`
-2. `npm test && npm run check:deploy`
-3. `npm run deploy` (activates the cron trigger as well as the binding)
-4. After a few minutes confirm objects appear: `npx wrangler r2 object get navicast-ais-archive/ais/YYYY/MM/DD/HH/mm.ndjson.gz --file out.gz`
-5. Optionally add an R2 lifecycle rule to expire objects after N days.
+The feed's location endpoint does not contain ship type. Daily vessel metadata capture is still required from day one; joining that metadata into serving and evaluation is tracked separately in #14. Sparse tracks and repeated upstream snapshots reduce usable evaluation coverage. A continuity check must treat a missing object, an empty snapshot or repeated `data_updated_at` as a gap.

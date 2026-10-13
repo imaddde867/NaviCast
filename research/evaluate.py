@@ -13,7 +13,6 @@ import gzip
 import json
 import os
 import sys
-import zlib
 
 import numpy as np
 
@@ -24,6 +23,12 @@ M_PER_DEG = 111_111
 EARTH_RADIUS_M = 6_371_008.8
 BUCKETS = (("<2", 0.0, 2.0), ("2-8", 2.0, 8.0), (">=8", 8.0, np.inf))
 PREDICTORS = ("persistence", "dead_reckoning")
+DIGITRAFFIC_SOURCE_URL = "https://meri.digitraffic.fi/api/ais/v1/locations"
+CC_BY_4_URL = "https://creativecommons.org/licenses/by/4.0/"
+ATTRIBUTION_MODIFICATIONS = [
+    "Observations are deduplicated by MMSI and timestampExternal.",
+    "Metrics are calculated after filtering invalid speed/course values and matching later observations to the requested horizons.",
+]
 
 
 def find_files(spec):
@@ -32,18 +37,26 @@ def find_files(spec):
     return sorted(glob.glob(spec, recursive=True))
 
 
-def load_tracks(paths):
+def load_tracks(paths, provenance=None):
     """mmsi -> arrays (t_ms, lat, lon, sog, cog) sorted by time, deduped by (mmsi, timestampExternal).
 
     ponytail: everything is held in memory (~100 B/obs); chunk by mmsi range if an archive outgrows RAM.
     """
     seen = {}
     for path in paths:
+        source = None
+        first_record = True
         try:
             with gzip.open(path, "rt", encoding="utf-8") as handle:
                 for line in handle:
                     try:
                         r = json.loads(line)
+                        if first_record:
+                            first_record = False
+                            if isinstance(r, dict) and r.get("schema") == 1:
+                                value = r.get("source")
+                                if isinstance(value, str) and value.strip():
+                                    source = value.strip()
                         ts = r["timestampExternal"]  # the header line has none -> KeyError
                         if ts is None:
                             continue
@@ -53,12 +66,51 @@ def load_tracks(paths):
                         continue
         except (OSError, EOFError) as error:
             print(f"skipping {path}: {error}", file=sys.stderr)
+        if provenance is not None:
+            if source is None:
+                provenance["missing_source_files"] += 1
+            else:
+                provenance["sources"].add(source)
     tracks = {}
     for mmsi, obs in seen.items():
         ts = sorted(obs)
         cols = np.array([[np.nan if v is None else v for v in obs[t]] for t in ts], dtype=float)
         tracks[mmsi] = (np.array(ts, dtype=np.int64), cols[:, 0], cols[:, 1], cols[:, 2], cols[:, 3])
     return tracks
+
+
+def describe_provenance(provenance):
+    sources = sorted(provenance["sources"])
+    missing = provenance["missing_source_files"]
+    digitraffic_url = DIGITRAFFIC_SOURCE_URL
+    if not sources:
+        status = "missing"
+    elif len(sources) > 1 or missing:
+        status = "mixed"
+    elif sources[0] == digitraffic_url:
+        status = "digitraffic"
+    elif sources[0].casefold() == "synthetic":
+        status = "synthetic"
+    else:
+        status = "identified"
+
+    described_sources = []
+    for source in sources:
+        if source == digitraffic_url:
+            described_sources.append({
+                "source": "Fintraffic Digitraffic Marine AIS locations API",
+                "source_url": digitraffic_url,
+                "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+                "license_url": CC_BY_4_URL,
+            })
+        else:
+            described_sources.append({"source": source})
+    return {
+        "status": status,
+        "sources": described_sources,
+        "files_without_source": missing,
+        "modifications": ATTRIBUTION_MODIFICATIONS,
+    }
 
 
 def haversine_m(lat1, lon1, lat2, lon2):
@@ -115,15 +167,6 @@ def summarize(scored):
     return result
 
 
-def group_id(mmsi, t_ms, split_by, n_groups=5):
-    """Stub for future model training; nothing here trains. 'vessel' keeps every observation of a
-    vessel in one group (no leakage across a vessel's track). 'time' returns the UTC day number,
-    so the caller can put earlier days in train and later days in test."""
-    if split_by == "vessel":
-        return zlib.crc32(str(int(mmsi)).encode()) % n_groups
-    return int(t_ms // 86_400_000)
-
-
 def markdown(summary):
     fmt = lambda s, k: "-" if s is None else f"{s[k]:.0f}"
     lines = ["| horizon | sog (kn) | n | persistence median | p90 | p95 | dead_reckoning median | p90 | p95 |",
@@ -138,33 +181,25 @@ def markdown(summary):
 
 def evaluate(spec):
     paths = find_files(spec)
-    tracks = load_tracks(paths)
+    provenance = {"sources": set(), "missing_source_files": 0}
+    tracks = load_tracks(paths, provenance)
     return {"files": len(paths), "vessels": len(tracks),
             "observations": sum(len(v[0]) for v in tracks.values()),
-            "horizons": summarize(score(tracks))}, tracks
+            "horizons": summarize(score(tracks)),
+            "data_attribution": describe_provenance(provenance)}, tracks
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("input", help="directory, glob or file of *.ndjson.gz snapshots")
     ap.add_argument("--json", metavar="FILE", help="also write the summary as JSON")
-    ap.add_argument("--split-by", choices=("vessel", "time"),
-                    help="stub: print the group assignment a future model split would use")
     args = ap.parse_args(argv)
-    result, tracks = evaluate(args.input)
+    result, _tracks = evaluate(args.input)
     if not result["files"] or not result["observations"]:
         print(f"no observations found under {args.input!r}", file=sys.stderr)
         return 2
     print(f"{result['files']} files, {result['vessels']} vessels, {result['observations']} unique observations\n")
     print(markdown(result["horizons"]))
-    if args.split_by:
-        groups = {}
-        for mmsi, (t, *_) in tracks.items():
-            for ts in t:
-                g = group_id(mmsi, ts, args.split_by)
-                groups[g] = groups.get(g, 0) + 1
-        print(f"\nGroup assignment (--split-by {args.split_by}), observations per group:")
-        print(", ".join(f"{g}: {n}" for g, n in sorted(groups.items())))
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:
             json.dump(result, handle, indent=2)

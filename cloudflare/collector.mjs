@@ -1,22 +1,5 @@
 // Archives one raw AIS snapshot per invocation to R2 as gzipped NDJSON (see docs/evaluation.md).
 // Works from raw features, not normalize(): keeps rot and sentinel values (sog 102.3, cog 360, heading 511).
-const SOURCE = 'https://meri.digitraffic.fi/api/ais/v1/locations';
-const MAX_BODY_BYTES = 8 * 1024 * 1024;
-
-async function loadRaw() {
-  const response = await fetch(SOURCE, {
-    headers: { 'Accept-Encoding': 'gzip', 'Digitraffic-User': 'NaviCast/imadlab.com' },
-    signal: AbortSignal.timeout(8000),
-    redirect: 'manual',
-  });
-  if (!response.ok || Number(response.headers.get('Content-Length')) > MAX_BODY_BYTES) throw new Error('Invalid upstream response');
-  const text = await response.text();
-  if (text.length > MAX_BODY_BYTES) throw new Error('Upstream body too large');
-  const payload = JSON.parse(text);
-  if (payload?.type !== 'FeatureCollection' || !Array.isArray(payload.features)) throw new Error('Invalid upstream schema');
-  return { fetched_at: Date.now(), updated_at: payload.dataUpdatedTime ?? null, features: payload.features };
-}
-
 const num = value => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
 function record(feature, fetchedAt) {
@@ -24,13 +7,17 @@ function record(feature, fetchedAt) {
   const geometry = feature?.geometry;
   const [lon, lat] = geometry?.type === 'Point' && Array.isArray(geometry.coordinates) ? geometry.coordinates : [];
   const mmsi = num(p?.mmsi);
-  if (!Number.isInteger(mmsi) || mmsi <= 0 || num(lat) === null || num(lon) === null) return null;
-  const ts = num(p.timestampExternal);
+  const latitude = num(lat);
+  const longitude = num(lon);
+  if (!Number.isInteger(mmsi) || mmsi <= 0 || mmsi > 999999999
+      || latitude === null || latitude < -90 || latitude > 90
+      || longitude === null || longitude < -180 || longitude > 180) return null;
+  const ts = num(p?.timestampExternal);
   return {
-    mmsi, lat, lon, timestampExternal: ts,
+    mmsi, lat: latitude, lon: longitude, timestampExternal: ts,
     age_s: ts === null ? null : Math.round((fetchedAt - ts) / 1000),
-    sog: num(p.sog), cog: num(p.cog), heading: num(p.heading), rot: num(p.rot),
-    navStat: num(p.navStat), posAcc: p.posAcc ?? null, raim: p.raim ?? null,
+    sog: num(p?.sog), cog: num(p?.cog), heading: num(p?.heading), rot: num(p?.rot),
+    navStat: num(p?.navStat), posAcc: p?.posAcc ?? null, raim: p?.raim ?? null,
   };
 }
 
@@ -44,22 +31,25 @@ async function gzip(text) {
   return new Response(new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
 }
 
-export async function collectSnapshot(env, now = Date.now(), snapshotLoader = loadRaw) {
+export async function collectSnapshot(env, now, snapshotLoader) {
   try {
     if (!env?.AIS_ARCHIVE) throw new Error('AIS_ARCHIVE binding missing');
+    if (!Number.isFinite(now)) throw new Error('Invalid scheduled timestamp');
+    if (typeof snapshotLoader !== 'function') throw new Error('Snapshot loader missing');
     const snap = await snapshotLoader();
+    if (typeof snap?.source !== 'string' || !snap.source) throw new Error('Snapshot source missing');
     const rows = snap.features.map(feature => record(feature, snap.fetched_at)).filter(Boolean);
     if (!rows.length) throw new Error('Empty snapshot');
     const header = {
-      schema: 1, fetched_at: new Date(snap.fetched_at).toISOString(), source: SOURCE,
+      schema: 1, fetched_at: new Date(snap.fetched_at).toISOString(), source: snap.source,
       count: rows.length, data_updated_at: snap.updated_at ?? null,
     };
     const body = await gzip([header, ...rows].map(line => JSON.stringify(line)).join('\n') + '\n');
     const key = archiveKey(now);
-    await env.AIS_ARCHIVE.put(key, body, { httpMetadata: { contentType: 'application/x-ndjson' } });
+    await env.AIS_ARCHIVE.put(key, body, { httpMetadata: { contentType: 'application/gzip' } });
     return { ok: true, key, count: rows.length, bytes: body.byteLength };
   } catch (error) {
     console.error('collectSnapshot failed', error);
-    return { ok: false, error: String(error?.message ?? error) };
+    throw error;
   }
 }
