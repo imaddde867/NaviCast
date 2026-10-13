@@ -83,3 +83,4 @@ The runtime is pinned in `requirements.lock`. Regenerate it with `uv pip compile
 - `docs/data_management_plan.md` — data fields, retention, and access limits
 - `ML_Model.ipynb` — historical model exploration
 - `LICENSE` — MIT license
+- `cloudflare/LAND_MASK_NOTICE.md` — OpenStreetMap ODbL notice for the land mask
