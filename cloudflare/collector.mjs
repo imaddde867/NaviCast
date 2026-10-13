@@ -29,7 +29,9 @@ export const MAX_BODY_BYTES = 900_000;
 // Age, not database size: SQLite may not shrink after DELETE, so a size-based pause might never lift.
 export const MAX_RETENTION_DAYS = 8;
 
-const text = value => (value == null ? null : String(value));
+// ISO string or null; a numeric epoch is converted so /health can parse it (Date.parse of a digit string is NaN).
+const text = value => (value == null ? null
+  : typeof value === 'number' && Number.isFinite(value) ? new Date(value).toISOString() : String(value));
 
 const stamp = now => new Date(now).toISOString();
 

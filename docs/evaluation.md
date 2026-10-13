@@ -39,6 +39,8 @@ Owner steps before the archive can start, none of which this branch performs:
 - Confirm the account is on Workers Free, create the D1 database, replace the placeholder `database_id`, and apply `migrations/0001_archive_objects.sql`.
 - Run `npm ci`, `npm test` and `npm run check:deploy`; a dry-run validates the bundle, not that the database exists or free-tier CPU compliance.
 - Deploy, then confirm that `/health` is 200, that minute rows decompress correctly with scheduled-time keys, and that the first daily metadata row appears.
+- After the first full UTC day, compare the measured D1 size and bytes per day with the ~43 MB/day estimate (from one 960-vessel snapshot; busier periods may differ). If it is higher, lower `MAX_RETENTION_DAYS` before the 8-day window can approach the 500 MB database limit. A full D1 fails inserts closed (`/health` goes 503) but whether DELETE still works on a full database is unverified.
+- If a download page ever fails near the body cap, retry with `--page-size 1`; whether the D1 REST API accepts 10 x ~1.8 MB hex responses is untested.
 - Measure deployed CPU for both crons, and verify failure alerting and archive continuity before declaring #9 complete.
 
 ## Experimental evaluation
