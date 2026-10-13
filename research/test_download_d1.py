@@ -30,7 +30,7 @@ def _gzip_json(value):
 
 def _ais_row(day=DAY, hour=0, minute=0, source=SOURCE, update="2025-02-03T00:00:00Z", body_override=None):
     scheduled = _timestamp_ms(day, hour, minute)
-    fetched = scheduled + 5000
+    fetched = scheduled + 5123  # non-zero ms, as Date.now() produces
     stamp = dt.datetime.fromtimestamp(fetched / 1000, tz=dt.timezone.utc).isoformat(timespec="milliseconds").replace(
         "+00:00", "Z")
     record = {"mmsi": 230000001, "lat": 60.0, "lon": 24.0, "timestampExternal": scheduled,
@@ -45,7 +45,7 @@ def _ais_row(day=DAY, hour=0, minute=0, source=SOURCE, update="2025-02-03T00:00:
 
 def _meta_row(day=DAY):
     scheduled = _timestamp_ms(day, 23, 59)
-    fetched = scheduled + 2000
+    fetched = scheduled + 2345
     stamp = dt.datetime.fromtimestamp(fetched / 1000, tz=dt.timezone.utc).isoformat(timespec="milliseconds").replace(
         "+00:00", "Z")
     record = {"mmsi": 230000002, "name": "FIXTURE", "callSign": "OHXX", "imo": 1000001,
