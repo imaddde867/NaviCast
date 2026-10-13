@@ -1,4 +1,5 @@
 import countries from './countries.json' with { type: 'json' };
+import { collectSnapshot } from './collector.mjs';
 
 const UPSTREAM = 'https://meri.digitraffic.fi/api/ais/v1/locations';
 const HORIZON_MS = 30 * 60 * 1000;
@@ -226,5 +227,8 @@ export default {
       if (health) return json({ status: 'unhealthy', mode: 'live', upstream: 'unavailable', time: new Date().toISOString(), version: '1.0.0' }, 503);
       return json({ detail: 'AIS upstream unavailable' }, 503);
     }
+  },
+  scheduled(event, env, ctx) {
+    ctx.waitUntil(collectSnapshot(env));
   },
 };

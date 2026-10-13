@@ -12,5 +12,9 @@
   "routes": [
     { "pattern": "navicast.imadlab.com", "custom_domain": true }
   ],
+  "triggers": { "crons": ["* * * * *"] },
+  "r2_buckets": [
+    { "binding": "AIS_ARCHIVE", "bucket_name": "navicast-ais-archive" }
+  ],
   "observability": { "enabled": true }
 }

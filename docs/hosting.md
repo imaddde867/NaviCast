@@ -6,7 +6,7 @@ A canonical snapshot is cached for 30 seconds per Cloudflare location. The hoste
 
 GitHub Pages could host the HTML but cannot run the dynamic API or persistent MQTT collector. Supabase could retain history, but would add storage, migrations and access policies that the current public map does not need. The existing imadlab Supabase project is unchanged.
 
-The optional Python/PostgreSQL/MQTT stack remains the collection path. The hosted Worker does not run those processes or record AIS history.
+The optional Python/PostgreSQL/MQTT stack remains the collection path. The hosted Worker does not run those processes or serve AIS history. A per-minute Cron Trigger only archives raw snapshots to the R2 bucket `navicast-ais-archive` for offline accuracy evaluation; see [evaluation.md](evaluation.md). The bucket must be created before `npm run deploy`.
 
 ## Release
 
