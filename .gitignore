@@ -90,3 +90,4 @@ bucket_policy.json
 output/
 .pytest_cache/
 .superpowers/
+.gitnexus
