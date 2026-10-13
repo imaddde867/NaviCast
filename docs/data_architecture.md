@@ -37,4 +37,4 @@ The page polls `/vessels` and draws current positions and estimates. It loads Le
 
 The live API has no authentication. Keep it on a trusted network. AIS broadcasts are public, but vessel identifiers, positions, and movement history can still be sensitive in context.
 
-The notebook and figures in `docs/ML_Model_docs/` are historical experiments. Their metrics have not been validated for the current live pipeline and are not used by the API.
+The notebook and figures in `archive/` are historical experiments. Their evaluation is invalid: it used held-out target positions and a random row split. They are not used by the API; see `archive/README.md`.
