@@ -64,14 +64,30 @@ node --test tests/frontend.test.cjs
 
 For a running demo, `GET /meta` should report `mode: demo` and `prediction_method: dead_reckoning`; `GET /vessels` returns four records marked `data_source: synthetic`. In live mode, `/health` checks the database connection.
 
-## Data and limits
+## Known limitations
 
 - Demo positions and speeds are synthetic. Their timestamps are generated relative to the current time.
 - Predictions are straight-line dead-reckoning estimates for 30 minutes. They are illustrative and must not be used for navigation or safety decisions.
-- Live mode stores AIS data in PostgreSQL. Raw rows are cleaned up after 24 hours; expired projections are hidden immediately and stored predictions are cleaned up after one hour. Ingestion buffering is bounded and in memory: a prolonged database outage or process exit can lose observations.
-- The API has no authentication. Keep live deployments on a trusted network.
+- No trained model is served. Coast conflicts are not yet flagged on the live site; the land-mask flag remains a draft prototype in [PR #29](https://github.com/imaddde867/NaviCast/pull/29).
+- The public Worker API has no authentication. Keep the optional local live API and database on a trusted network.
 - The map uses external Leaflet, icon, and tile services, so full map rendering needs browser network access.
-- `ML_Model.ipynb` and `docs/ML_Model_docs/` contain historical research artifacts. They are not part of serving, and their results are not validated product-performance claims.
+- `archive/ML_Model.ipynb` and `archive/ML_Model_docs/` contain historical research artifacts. They are not part of serving, and their evaluation is invalid because it used held-out target positions and a random row split.
+
+## Data and retention
+
+The public Worker reads Digitraffic AIS snapshots and temporarily caches them; it does not retain vessel history. Observations include MMSI, positions, source timestamps, speed, course, heading and navigation status. The optional local MQTT/PostgreSQL pipeline stores raw source messages, deletes raw rows after 24 hours and deletes stored predictions after one hour. Its in-memory ingestion buffer can lose observations during an outage or process exit.
+
+The archive collector in [PR #30](https://github.com/imaddde867/NaviCast/pull/30) is not deployed. The proposed private archive will retain per-minute navigation observations and daily vessel metadata without automatic deletion, with offline compaction and a local backup. Storage selection, backup/offload and raw-archive removal procedures remain owner decisions in [#8](https://github.com/imaddde867/NaviCast/issues/8) and [#13](https://github.com/imaddde867/NaviCast/issues/13).
+
+Vessel identifiers can identify people for some craft. Whether leisure craft appear in this feed is unverified. Vessel names, call signs and destinations must not appear in committed fixtures or published screenshots unless necessary and documented. The baseline fixture uses stable pseudonyms in place of MMSI and contains only fields needed by its check scripts.
+
+The removal-request contact route and the policy for exclusion/deletion from published data, derived data and private archives await owner approval in [#7](https://github.com/imaddde867/NaviCast/issues/7). [The proposed manual removal process](docs/data_management_plan.md#proposed-removal-process--owner-approval-and-implementation-pending) uses a private owner-selected email address, a private exclusion register and explicit treatment of backups. It awaits approval and implementation.
+
+## Data licences
+
+Source: [Fintraffic / digitraffic.fi](https://www.digitraffic.fi/en/marine-traffic/), license [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), following [Digitraffic's attribution terms](https://www.digitraffic.fi/en/terms-of-service/). NaviCast filters and normalizes observations and adds constant-course estimates. The committed `scripts/baseline/vessels_*.json` fixture derives from this source; its identifiers are pseudonymized and unused fields removed. Estimates and upstream data have no guarantee of accuracy and must not be used for navigation.
+
+Map tiles credit OpenStreetMap contributors. The proposed OSM-derived land mask in PR #29 is licensed ODbL 1.0, separately from this repository's MIT code licence; its NOTICE and footer credit must accompany that asset before merge. The mask is not present on this branch. No IEEE DataPort or DMA dataset is committed; their licence/access checks remain open in [#15](https://github.com/imaddde867/NaviCast/issues/15).
 
 Optional database integration checks use `NAVICAST_TEST_DSN` pointing to a disposable PostgreSQL instance; they create session-local temporary tables. CI runs these checks with PostgreSQL 16.
 
@@ -81,6 +97,7 @@ The runtime is pinned in `requirements.lock`. Regenerate it with `uv pip compile
 
 - `docs/data_architecture.md` — demo and live data flows
 - `docs/data_management_plan.md` — data fields, retention, and access limits
-- `ML_Model.ipynb` — historical model exploration
+- `archive/README.md` — historical model exploration and invalid evaluation
+- `docs/roadmap/ROADMAP.md` — shared roadmap and issue order
 - `LICENSE` — MIT license
 - `cloudflare/LAND_MASK_NOTICE.md` — OpenStreetMap ODbL notice for the land mask

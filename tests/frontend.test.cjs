@@ -215,7 +215,7 @@ test('popup notes a coast ahead only when the projection is flagged as crossing 
     assert.doesNotMatch(app.run('createPopupContent(clear).innerHTML'), /Coast ahead/);
 });
 
-test('basemap requests public OpenStreetMap tiles and credits the contributor source', () => {
+test('basemap credits OpenStreetMap and Digitraffic data and its licence', () => {
     const requests = [];
     const map = { setView() { return this; } };
     const context = vm.createContext({ L: {
@@ -226,6 +226,9 @@ test('basemap requests public OpenStreetMap tiles and credits the contributor so
     assert.equal(requests.length, 1);
     assert.equal(requests[0].url, 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
     assert.match(requests[0].options.attribution, /openstreetmap\.org\/copyright/);
+    assert.match(requests[0].options.attribution, /digitraffic\.fi\/en\/marine-traffic/);
+    assert.match(requests[0].options.attribution, /creativecommons\.org\/licenses\/by\/4\.0/);
+    assert.match(requests[0].options.attribution, /constant-course estimates added/);
 });
 
 test('first demo fleet is framed once without resetting the view on later polls', async () => {
