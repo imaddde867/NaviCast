@@ -1,0 +1,35 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: local-test-only
+          POSTGRES_DB: ais_project
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ais_project"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NAVICAST_TEST_DSN: host=127.0.0.1 port=5432 dbname=ais_project user=postgres password=local-test-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - run: node --test tests/frontend.test.cjs
+      - run: bash -n start_navicast.sh
+      - run: docker compose config --quiet
+      - run: docker build -t navicast-check .

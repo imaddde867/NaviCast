@@ -1,102 +1,19 @@
-# NAVICAST Data Management Plan
+# Data management
 
-## 1. Data Collection
+## Sources and fields
 
-### 1.1 Data Sources
-- Finnish Transport Agency's Digitraffic Marine API via MQTT
-- Real-time AIS data from Baltic Sea region
-- JSON format containing vessel positions and metadata
+Demo mode generates four synthetic vessel records locally. It does not ingest or store real AIS messages.
 
-### 1.2 Data Types
-- Vessel identification (MMSI, name)
-- Position (lat/long)
-- Movement (speed, course, heading)
-- Status and timestamps
+Live mode receives AIS messages from the Digitraffic Marine MQTT feed. The pipeline stores vessel identifiers (MMSI), position, speed, course, heading, status fields, timestamps, and the source message as JSONB. Prediction rows contain estimated positions and their target and creation times.
 
-### 1.3 Collection Process
-- MQTT client subscribes to Digitraffic broker
-- Messages validated and stored in PostgreSQL
+## Storage and retention
 
-### 1.4 Volume
-- 50-200 messages/minute (~500 bytes each)
-- 40-160 MB daily, 12-60 GB annually
+Live data is stored in PostgreSQL. The MQTT client deletes raw position rows older than 24 hours; the prediction service deletes prediction rows older than one hour. These are code-defined retention periods, not configurable retention controls. Back up or delete the database according to the deployment's operational needs.
 
-## 2. Data Storage
+`schema.sql` initializes missing tables and indexes without deleting existing records. It is not a versioned migration system.
 
-### 2.1 Infrastructure
-- PostgreSQL 13+ with JSONB storage
-- Local server with backup redundancy
+## Access and limits
 
-### 2.2 Schema
-- `raw_ais_data`: Current vessel information
-- `predictions`: Trajectory predictions
+The API does not authenticate callers. Restrict live API and database access to trusted networks and protect database credentials. Public AIS data can still expose vessel movement patterns when collected over time.
 
-### 2.3 Retention
-- Raw data: 24 hours (configurable)
-- Predictions: Until superseded
-
-## 3. Data Processing
-
-### 3.1 Validation
-- Required fields, range and type validation
-- Consistency checks for realistic movement
-
-### 3.2 Enrichment
-- Country codes, vessel type descriptions
-- Trajectory predictions
-
-### 3.3 Prediction Processing
-- ML model with dead reckoning fallback
-- Based on recent movement patterns
-
-## 4. Data Access
-
-### 4.1 Methods
-- REST API, web interface, data exports
-
-### 4.2 Capabilities
-- Vessel data retrieval and filtering
-- JSON/CSV downloads
-
-### 4.3 Access Control
-- No authentication (private deployments)
-- Database protected by username/password
-
-## 5. Data Quality
-
-### 5.1 Measures
-- Completeness, accuracy, timeliness
-- Anomaly detection
-
-### 5.2 Known Issues
-- Message loss, position errors, data gaps
-
-## 6. Technical Requirements
-
-### 6.1 Infrastructure
-- Dual-core CPU, 8GB RAM recommended
-- 20GB storage, reliable internet
-
-### 6.2 Dependencies
-- PostgreSQL 13+, Python 3.9+
-- FastAPI, Paho-MQTT, Psycopg2, Pandas, Scikit-learn
-
-## 7. Ethics and Privacy
-
-### 7.1 Considerations
-- No personal data collected
-- Only public AIS broadcasts stored
-
-### 7.2 Legal Compliance
-- Follows Digitraffic terms of service
-- AIS data generally considered open data
-
-## 8. Maintenance
-
-### 8.1 Regular Tasks
-- Database optimization, log rotation
-- Software updates, configuration review
-
-### 8.2 Monitoring
-- Service status, database performance
-- Error rates, data flow
+The demo dataset is synthetic. Demo and live predictions use straight-line dead reckoning for a 30-minute horizon; they are estimates for visualization and are not suitable for navigation or safety decisions. The archived model notebook is research material and is not used to serve predictions.

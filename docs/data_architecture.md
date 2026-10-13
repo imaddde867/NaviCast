@@ -1,137 +1,40 @@
-# NAVICAST Data Architecture
+# Data architecture
 
-This document describes the data architecture of the NAVICAST system, detailing how data flows through the system from collection to visualization.
+NaviCast has a database-free demo path and a PostgreSQL-backed live path. Both use the same FastAPI routes and Leaflet page.
 
-## Overview Diagram
+## Demo
 
-![System Architecture Diagram](../static/diagram.png)
+With `NAVICAST_MODE=demo`, the API calls `demo_data.sample_rows()` for each vessel request. It returns four explicitly synthetic records with timestamps relative to the current UTC time. Moving vessels receive 30-minute straight-line estimates calculated from speed and course. The API reports the mode and method at `/meta`, and marks each record with `data_source: synthetic`. No database, MQTT client, or model file is used.
 
-## Components and Data Flow
+## Live data flow
 
-### 1. Data Collection
+```text
+Digitraffic MQTT → mqtt_client.py → PostgreSQL → prediction_service.py
+                                              ↓
+                                      api_server.py → Leaflet page
+```
 
-**AIS Data Feed (Digitraffic)**
-- Source of real-time vessel position and information data
-- Provides AIS messages via MQTT protocol
-- Data includes vessel identification, position, speed, course, etc.
-- Messages follow standard AIS format with Digitraffic-specific extensions
+The MQTT client stores vessel positions and the original message in `raw_ais_data`. The prediction service reads recent positions and writes 30-minute dead-reckoning estimates to `predictions`. The API returns the newest position and any unexpired prediction. The served application does not load a trained model.
 
-**MQTT Client**
-- Subscribes to Digitraffic AIS topics
-- Processes incoming AIS messages
-- Validates and transforms data
-- Batches messages for efficient database insertion
-- Handles network issues and connection recovery
+## Storage
 
-**Data Flow**:
-1. Digitraffic publishes AIS messages to MQTT topics
-2. MQTT client subscribes to relevant topics
-3. Client receives messages, validates them, and prepares for storage
-4. Validated data is inserted into the PostgreSQL database
+- `raw_ais_data` stores `vessel_id`, latitude, longitude, a timezone-aware timestamp, and the source message as JSONB. Its primary key is `(vessel_id, timestamp)`.
+- `predictions` stores one current row per vessel, including predicted coordinates, the target time, and the time the estimate was made. `vessel_id` is the primary key; `(vessel_id, prediction_for_timestamp)` is also unique.
+- Live ingestion removes raw rows older than 24 hours. The prediction service removes predictions older than one hour.
+- `schema.sql` creates missing tables and indexes without deleting existing records. It does not migrate incompatible schemas.
 
-### 2. Data Storage
+## API and map
 
-**PostgreSQL Database**
-- Relational database storing all vessel and prediction data
-- Primary tables:
-  - `raw_ais_data`: Current and historical vessel information
-  - `predictions`: Vessel trajectory predictions
+- `GET /vessels` returns the latest vessel data with optional MMSI, time-range, and result-limit filters.
+- `GET /vessels/{vessel_id}` returns one vessel.
+- `GET /vessels/download?format=json|csv` exports data.
+- `GET /meta` reports demo/live mode and the prediction method.
+- `GET /health` reports API health and checks PostgreSQL in live mode.
 
-**Schema Details**:
+The page polls `/vessels` and draws current positions and estimates. It loads Leaflet assets and map tiles from external services.
 
-`raw_ais_data` table:
-- `vessel_id` (INTEGER): MMSI number of the vessel
-- `latitude` (DOUBLE PRECISION): Current latitude
-- `longitude` (DOUBLE PRECISION): Current longitude
-- `timestamp` (TIMESTAMP): Time when data was recorded
-- `raw_json` (JSONB): Original AIS message in JSON format with the following properties:
-  - `sog` (DOUBLE PRECISION): Speed over ground in knots
-  - `cog` (DOUBLE PRECISION): Course over ground in degrees
-  - `heading` (INTEGER): Heading in degrees
-  - `nav_stat` (INTEGER): Navigation status code
-  - `pos_acc` (BOOLEAN): Position accuracy indicator
+## Access boundary
 
-`predictions` table:
-- `id` (SERIAL, PRIMARY KEY): Unique identifier
-- `vessel_id` (INTEGER): References raw_ais_data(vessel_id)
-- `predicted_latitude` (DOUBLE PRECISION): Predicted latitude
-- `predicted_longitude` (DOUBLE PRECISION): Predicted longitude
-- `prediction_for_timestamp` (TIMESTAMP): Time for which prediction is made
-- `prediction_made_at` (TIMESTAMP): Time when prediction was calculated
+The live API has no authentication. Keep it on a trusted network. AIS broadcasts are public, but vessel identifiers, positions, and movement history can still be sensitive in context.
 
-### 3. Data Processing
-
-**Prediction Service**
-- Periodically processes latest vessel data
-- Analyzes vessel speed, course, and heading
-- Calculates predicted positions using machine learning model
-- Provides fallback to dead reckoning when appropriate
-- Stores prediction results in database
-- Performs data validation and sanity checks
-
-**Processing Steps**:
-1. Retrieve recent vessel data from database (last 30 minutes)
-2. Filter vessels appropriate for prediction (e.g., moving vessels with speed > 0.5 knots)
-3. For each vessel:
-   - Apply prediction algorithm (ML model with fallback to dead reckoning)
-   - Validate prediction results (ensure predictions are within reasonable limits)
-   - Store valid predictions in database
-4. Remove outdated predictions
-
-### 4. Data Access and API
-
-**API Server**
-- Provides REST API endpoints for data access
-- Retrieves vessel and prediction data from database
-- Formats responses as JSON
-- Allows filtering data by vessel ID and time range
-- Provides data download capabilities in multiple formats
-
-**Key Endpoints**:
-- `GET /vessels`: Retrieves vessel data with optional filtering
-- `GET /vessels/{vessel_id}`: Gets detailed information about a specific vessel
-- `GET /vessels/download`: Downloads vessel data in JSON or CSV format
-- `GET /health`: API health check endpoint
-
-**Data Enrichment**:
-- The API enhances raw data with:
-  - Country information derived from MMSI
-  - Human-readable vessel type names
-  - Navigation status descriptions
-
-### 5. Data Visualization
-
-**Web Frontend**
-- Displays vessels on interactive map using Leaflet.js
-- Shows vessel information in popup panels
-- Visualizes predicted trajectories with dotted lines
-- Updates in real-time (10-second refresh interval)
-- Provides user controls for display options (theme switching, prediction toggling)
-
-**Visualization Flow**:
-1. Frontend requests data from API server
-2. API server retrieves and returns formatted data
-3. Frontend renders vessels on map with appropriate styling
-4. Frontend updates vessel positions and predictions periodically
-5. User interactions trigger additional data requests or UI updates
-
-## Data Retention and Management
-
-- **Raw AIS Data**: Stored for 24 hours by default (configurable)
-- **Predictions**: Stored until superseded by newer predictions
-- **Data Cleanup**: Automated process removes old data
-- **Backup**: Regular database backups recommended
-
-## Data Security Considerations
-
-- No personal information is stored in the system
-- AIS data is publicly available maritime information
-- Database access is restricted via username/password authentication
-- API does not require authentication in current implementation (intended for private deployments)
-
-## Data Monitoring
-
-- System logs track data processing and errors
-- API requests are logged for monitoring
-- Database performance should be monitored
-- Prediction quality can be evaluated by comparing predictions to actual positions 
+The notebook and figures in `docs/ML_Model_docs/` are historical experiments. Their metrics have not been validated for the current live pipeline and are not used by the API.

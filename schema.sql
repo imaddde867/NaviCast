@@ -2,18 +2,13 @@
 -- PostgreSQL 13.0+
 
 -- Create database
--- Run this command separately first: 
+-- Run this command separately first:
 -- CREATE DATABASE ais_project;
 
--- Connect to the database
-\c ais_project;
-
--- Drop tables if they exist (for clean setup)
-DROP TABLE IF EXISTS predictions;
-DROP TABLE IF EXISTS raw_ais_data;
+-- Safe initialization: existing observations and predictions are preserved.
 
 -- Create raw AIS data table
-CREATE TABLE raw_ais_data (
+CREATE TABLE IF NOT EXISTS raw_ais_data (
     vessel_id INTEGER NOT NULL,
     latitude DOUBLE PRECISION NOT NULL,
     longitude DOUBLE PRECISION NOT NULL,
@@ -23,7 +18,7 @@ CREATE TABLE raw_ais_data (
 );
 
 -- Create predictions table
-CREATE TABLE predictions (
+CREATE TABLE IF NOT EXISTS predictions (
     vessel_id INTEGER NOT NULL,
     predicted_latitude DOUBLE PRECISION NOT NULL,
     predicted_longitude DOUBLE PRECISION NOT NULL,
@@ -34,9 +29,9 @@ CREATE TABLE predictions (
 );
 
 -- Create indices for faster queries
-CREATE INDEX idx_raw_ais_data_timestamp ON raw_ais_data(timestamp);
-CREATE INDEX idx_raw_ais_data_vessel_id ON raw_ais_data(vessel_id);
-CREATE INDEX idx_predictions_timestamp ON predictions(prediction_for_timestamp);
+CREATE INDEX IF NOT EXISTS idx_raw_ais_data_timestamp ON raw_ais_data(timestamp);
+CREATE INDEX IF NOT EXISTS idx_raw_ais_data_vessel_id ON raw_ais_data(vessel_id);
+CREATE INDEX IF NOT EXISTS idx_predictions_timestamp ON predictions(prediction_for_timestamp);
 
 -- Create a function to clean up old data (optional)
 CREATE OR REPLACE FUNCTION cleanup_old_data(days_to_keep INTEGER)

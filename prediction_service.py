@@ -1,16 +1,11 @@
-import pandas as pd
-import numpy as np
+import math
 import psycopg2
-import joblib
 import logging
 from logging.handlers import RotatingFileHandler
 import time
 import schedule
-import os
-from pathlib import Path
-from datetime import datetime, timedelta
-from typing import Dict, List, Tuple, Optional, Any
-from config import ensure_log_dir, get_db_config
+from datetime import datetime, timedelta, timezone
+from config import BOUNDS, ensure_log_dir, get_db_config
 
 # Create logs directory if it doesn't exist
 LOG_DIR = ensure_log_dir()
@@ -27,34 +22,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Constants
-MODEL_PATH = Path(os.getenv("NAVICAST_MODEL_PATH", "vessel_prediction_model.pkl"))
-PREDICTION_INTERVAL = 1800  # 30 minutes in seconds
+PREDICTION_HORIZON_SECONDS = 1800
+PREDICTION_CADENCE_MINUTES = 5
+AIS_RECENCY_MINUTES = 30
+PREDICTION_TTL_HOURS = 1
 
-# Database configuration
 DB_CONFIG = get_db_config()
-
-# Baltic Sea boundaries (for validation)
-LAT_MIN = 53
-LAT_MAX = 66
-LON_MIN = 9
-LON_MAX = 30
-
-# Load prediction model
-def load_model():
-    """Load the vessel prediction model"""
-    try:
-        logger.info("Loading prediction model...")
-        if MODEL_PATH.exists():
-            model = joblib.load(MODEL_PATH)
-            logger.info("Prediction model loaded successfully")
-            return model
-        else:
-            logger.warning(f"Model file {MODEL_PATH} not found, will use fallback dead reckoning")
-            return None
-    except Exception as e:
-        logger.error(f"Failed to load prediction model: {e}")
-        logger.warning("Will use fallback dead reckoning method for predictions")
-        return None
 
 # Calculate vessel position prediction
 def calculate_position_prediction(lat, lon, sog, cog, time_diff):
@@ -64,178 +37,104 @@ def calculate_position_prediction(lat, lon, sog, cog, time_diff):
     
     # Calculate position change using basic trigonometry
     # Approximately 111,111 meters per degree of latitude
-    delta_lat = (speed_mps * np.cos(np.radians(cog)) * time_diff) / 111111
+    delta_lat = (speed_mps * math.cos(math.radians(cog)) * time_diff) / 111111
     
     # Adjust longitude calculation for latitude (converging meridians)
-    cos_lat = np.cos(np.radians(lat))
+    cos_lat = math.cos(math.radians(lat))
     if abs(cos_lat) < 0.01:  # Avoid division by very small numbers near poles
         cos_lat = 0.01 if cos_lat >= 0 else -0.01
     
-    delta_lon = (speed_mps * np.sin(np.radians(cog)) * time_diff) / (111111 * cos_lat)
+    delta_lon = (speed_mps * math.sin(math.radians(cog)) * time_diff) / (111111 * cos_lat)
     
     return delta_lat, delta_lon
 
 def make_predictions():
-    """Retrieve latest vessel data and generate predictions"""
-    logger.info("Starting prediction cycle...")
-    start_time = time.time()
-    
+    """Project latest observations by constant speed and course for 30 minutes."""
     conn = None
     cur = None
     try:
-        # Connect to database
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
-
-        # Get the latest vessel data
-        query = """
-        SELECT 
-            vessel_id, 
-            latitude, 
-            longitude, 
-            COALESCE((raw_json -> 'properties' ->> 'sog')::float, 0) AS sog,
-            COALESCE((raw_json -> 'properties' ->> 'cog')::float, 0) AS cog,
-            COALESCE((raw_json -> 'properties' ->> 'heading')::float, 0) AS heading,
-            timestamp
-        FROM raw_ais_data
-        WHERE (vessel_id, timestamp) IN (
-            SELECT vessel_id, MAX(timestamp)
+        # Extract text: malformed historical motion must not abort the whole SELECT.
+        cur.execute("""
+            SELECT DISTINCT ON (vessel_id)
+                vessel_id, latitude, longitude,
+                raw_json -> 'properties' ->> 'sog',
+                raw_json -> 'properties' ->> 'cog',
+                raw_json -> 'properties' ->> 'heading', timestamp
             FROM raw_ais_data
-            WHERE timestamp > NOW() - INTERVAL '30 minutes'
-            GROUP BY vessel_id
-        )
-        """
-        cur.execute(query)
-        latest_data = cur.fetchall()
-
-        if not latest_data:
-            logger.info("No recent AIS data to process for predictions")
-            return
-
-        logger.info(f"Processing predictions for {len(latest_data)} vessels")
+            WHERE timestamp > NOW() - (%s * INTERVAL '1 minute')
+            ORDER BY vessel_id, timestamp DESC
+        """, (AIS_RECENCY_MINUTES,))
         predictions_count = 0
-        skipped_count = 0
-
-        # Process each vessel
-        for vessel_data in latest_data:
-            vessel_id, lat, lon, sog, cog, heading, timestamp = vessel_data
-            
-            # Skip vessels with invalid position data
-            if lat is None or lon is None:
-                logger.warning(f"Skipping vessel {vessel_id} with invalid position")
-                skipped_count += 1
-                continue
-                
-            # Skip stationary vessels
-            if sog is None or sog < 0.5:
-                logger.info(f"Skipping vessel {vessel_id} with low speed ({sog} knots)")
-                skipped_count += 1
-                continue
-            
-            # Validate and normalize input values
-            sog_val = max(0.0, min(50.0, float(sog) if sog is not None else 0.0))
-            cog_val = max(0.0, min(360.0, float(cog) if cog is not None and 0 <= cog <= 360 else 0.0))
-            heading_val = max(0.0, min(360.0, float(heading) if heading is not None and 0 <= heading <= 360 else cog_val))
-            
-            # Prepare input data for the model
+        for vessel_id, lat, lon, sog, cog, heading, timestamp in cur.fetchall():
             try:
-                input_data = pd.DataFrame({
-                    'latitude': [float(lat)],
-                    'longitude': [float(lon)],
-                    'sog': [sog_val],
-                    'cog': [cog_val],
-                    'heading': [heading_val],
-                    'time_diff': [PREDICTION_INTERVAL]
-                })
-                
-                # Try to use the model for prediction
-                try:
-                    if model is not None:
-                        delta_lat, delta_lon = model.predict(input_data)[0]
-                        logger.debug(f"Model prediction for vessel {vessel_id}: delta_lat={delta_lat:.6f}, delta_lon={delta_lon:.6f}")
-                    else:
-                        # Use dead reckoning if model is not available
-                        delta_lat, delta_lon = calculate_position_prediction(lat, lon, sog_val, cog_val, PREDICTION_INTERVAL)
-                        logger.debug(f"Dead reckoning for vessel {vessel_id}: delta_lat={delta_lat:.6f}, delta_lon={delta_lon:.6f}")
-                except Exception as e:
-                    logger.warning(f"Model prediction failed for vessel {vessel_id}: {e}")
-                    # Fallback to dead reckoning
-                    delta_lat, delta_lon = calculate_position_prediction(lat, lon, sog_val, cog_val, PREDICTION_INTERVAL)
-                    logger.debug(f"Fallback prediction for vessel {vessel_id}: delta_lat={delta_lat:.6f}, delta_lon={delta_lon:.6f}")
+                if any(isinstance(value, bool) for value in (lat, lon, sog, cog)):
+                    raise ValueError("Invalid motion values")
+                lat, lon, sog, cog = map(float, (lat, lon, sog, cog))
+                if (not all(math.isfinite(value) for value in (lat, lon, sog, cog))
+                        or not -90 <= lat <= 90 or not -180 <= lon <= 180
+                        or not 0.5 <= sog < 102.3 or not 0 <= cog < 360
+                        or not isinstance(timestamp, datetime)):
+                    raise ValueError("Unavailable or invalid motion")
+                delta_lat, delta_lon = calculate_position_prediction(
+                    lat, lon, sog, cog, PREDICTION_HORIZON_SECONDS)
+                predicted_lat, predicted_lon = lat + delta_lat, lon + delta_lon
+                if (abs(delta_lat) > 0.5 or abs(delta_lon) > 0.5
+                        or not BOUNDS["lat_min"] <= predicted_lat <= BOUNDS["lat_max"]
+                        or not BOUNDS["lon_min"] <= predicted_lon <= BOUNDS["lon_max"]):
+                    raise ValueError("Projection outside configured region or displacement limit")
+                prediction_for = timestamp + timedelta(seconds=PREDICTION_HORIZON_SECONDS)
+            except (TypeError, ValueError, OverflowError) as exc:
+                logger.warning("Skipping projection for vessel %s: %s", vessel_id, exc)
+                continue
 
-                # Calculate predicted position
-                predicted_lat = float(lat + delta_lat)
-                predicted_lon = float(lon + delta_lon)
-
-                # Validate prediction is within reasonable bounds
-                if (abs(delta_lat) > 0.5 or abs(delta_lon) > 0.5 or  # Maximum ~30nm in 30 minutes
-                    predicted_lat < LAT_MIN or predicted_lat > LAT_MAX or
-                    predicted_lon < LON_MIN or predicted_lon > LON_MAX):
-                    logger.warning(f"Invalid prediction for vessel {vessel_id}: "
-                                f"predicted_lat={predicted_lat:.4f}, predicted_lon={predicted_lon:.4f}")
-                    skipped_count += 1
-                    continue
-
-                # Calculate timestamps
-                prediction_for = timestamp + timedelta(seconds=PREDICTION_INTERVAL)
-                prediction_made = datetime.now()
-
-                # Store the prediction
+            cur.execute("SAVEPOINT prediction_row")
+            try:
                 cur.execute("""
-                    INSERT INTO predictions 
-                        (vessel_id, predicted_latitude, predicted_longitude, prediction_for_timestamp, prediction_made_at)
+                    INSERT INTO predictions
+                        (vessel_id, predicted_latitude, predicted_longitude,
+                         prediction_for_timestamp, prediction_made_at)
                     VALUES (%s, %s, %s, %s, %s)
                     ON CONFLICT (vessel_id) DO UPDATE SET
                         predicted_latitude = EXCLUDED.predicted_latitude,
                         predicted_longitude = EXCLUDED.predicted_longitude,
                         prediction_for_timestamp = EXCLUDED.prediction_for_timestamp,
                         prediction_made_at = EXCLUDED.prediction_made_at
-                """, (vessel_id, predicted_lat, predicted_lon, prediction_for, prediction_made))
-                
+                """, (vessel_id, predicted_lat, predicted_lon, prediction_for, datetime.now(timezone.utc)))
                 predictions_count += 1
-                
-            except Exception as e:
-                logger.error(f"Error processing prediction for vessel {vessel_id}: {e}")
-                if conn:
-                    conn.rollback()
-                skipped_count += 1
+            except psycopg2.Error as exc:
+                cur.execute("ROLLBACK TO SAVEPOINT prediction_row")
+                logger.warning("Skipping rejected projection for vessel %s: %s", vessel_id, exc)
+            finally:
+                cur.execute("RELEASE SAVEPOINT prediction_row")
 
-        # Commit all changes
+        cur.execute("DELETE FROM predictions WHERE prediction_made_at < NOW() - (%s * INTERVAL '1 hour')",
+                    (PREDICTION_TTL_HOURS,))
         conn.commit()
-        
-        # Clean up old predictions
-        try:
-            cur.execute("DELETE FROM predictions WHERE prediction_made_at < NOW() - INTERVAL '1 hour'")
-            conn.commit()
-            logger.info("Cleaned up old predictions")
-        except Exception as e:
-            logger.warning(f"Failed to clean up old predictions: {e}")
-            
-        duration = time.time() - start_time
-        logger.info(f"Prediction cycle completed in {duration:.2f}s. Created {predictions_count} predictions, skipped {skipped_count} vessels.")
-    
-    except Exception as e:
-        logger.error(f"Error in make_predictions: {e}")
+        logger.info("Committed %s constant-course projections", predictions_count)
+    except Exception as exc:
+        logger.error("Prediction cycle failed: %s", exc)
         if conn:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except psycopg2.Error:
+                logger.warning("Could not roll back a failed database connection")
     finally:
         if cur:
             cur.close()
         if conn:
             conn.close()
 
+
 def main():
     """Main function to run the prediction service"""
     try:
-        # Load the model at startup
-        global model
-        model = load_model()
-        
         # Make predictions immediately at startup
         make_predictions()
         
         # Schedule the periodic prediction task (every 5 minutes)
-        schedule.every(5).minutes.do(make_predictions)
+        schedule.every(PREDICTION_CADENCE_MINUTES).minutes.do(make_predictions)
         
         logger.info("Prediction service started. Making predictions every 5 minutes...")
         
