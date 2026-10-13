@@ -1,4 +1,5 @@
 import countries from './countries.json' with { type: 'json' };
+import { clearUntilFraction, pathHitsLand } from './landmask.mjs';
 
 const UPSTREAM = 'https://meri.digitraffic.fi/api/ais/v1/locations';
 const HORIZON_MS = 30 * 60 * 1000;
@@ -60,13 +61,19 @@ function normalize(features, fetchedAt) {
       predicted_longitude: null,
       prediction_for_timestamp: null,
       prediction_made_at: null,
+      projection_land_conflict: null,
+      projection_clear_until_fraction: null,
     };
     if (sog !== null && sog >= 0.5 && cog !== null) {
       const distance = sog * 0.51444 * 1800;
       const deltaLat = distance * Math.cos(cog * Math.PI / 180) / 111111;
       const deltaLon = distance * Math.sin(cog * Math.PI / 180) / (111111 * Math.cos(lat * Math.PI / 180));
       if (Math.abs(deltaLat) <= 0.5 && Math.abs(deltaLon) <= 0.5 && inRegion(lat + deltaLat, lon + deltaLon)) {
+        const conflict = pathHitsLand(lat, lon, lat + deltaLat, lon + deltaLon);
+        const clear = conflict ? clearUntilFraction(lat, lon, lat + deltaLat, lon + deltaLon) : null;
         Object.assign(vessel, {
+          projection_land_conflict: conflict,
+          projection_clear_until_fraction: clear === null ? null : Math.round(clear * 1000) / 1000,
           prediction_method: 'dead_reckoning',
           predicted_latitude: lat + deltaLat,
           predicted_longitude: lon + deltaLon,
@@ -192,7 +199,7 @@ export default {
     const url = new URL(request.url);
     if (request.method !== 'GET') return json({ detail: 'Method not allowed' }, 405, { Allow: 'GET' });
     if (url.pathname === '/meta') return json({ mode: 'live', prediction_method: 'dead_reckoning', prediction_horizon_minutes: 30, observation_stale_after_seconds: 300 });
-    if (url.pathname === '/docs') return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>NaviCast API</title><main><h1>NaviCast live API</h1><p>Digitraffic AIS observations in the Baltic region, cached for up to 30 seconds. Only observations from the last 30 minutes are returned. Constant speed and course projections target 30 minutes after the source observation; unavailable motion produces no projection.</p><ul><li><a href="/vessels?limit=500">GET /vessels</a>: optional mmsi, from_time, to_time, limit (1–1000, default 100). ISO dates use UTC unless an offset is supplied. Time filters select the current snapshot, with a two-hour default range.</li><li>GET /vessels/{MMSI}: one vessel, or 404.</li><li><a href="/vessels/download?format=csv">GET /vessels/download</a>: format=json|csv, with the same MMSI and time filters, up to 10000 rows.</li><li><a href="/meta">GET /meta</a>: mode and prediction horizon.</li><li><a href="/health">GET /health</a>: upstream availability (503 when unavailable).</li></ul><p>The edge API uses no historical database or trained model. Ship type is unknown in the location feed. Upstream failures return 503.</p><p>Source: <a href="https://www.digitraffic.fi/en/marine-traffic/">Fintraffic Digitraffic</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</p></main></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    if (url.pathname === '/docs') return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>NaviCast API</title><main><h1>NaviCast live API</h1><p>Digitraffic AIS observations in the Baltic region, cached for up to 30 seconds. Only observations from the last 30 minutes are returned. Constant speed and course projections target 30 minutes after the source observation; unavailable motion produces no projection. <code>projection_land_conflict</code> is true when the straight-line projection crosses land in an OpenStreetMap coastline mask (<code>projection_clear_until_fraction</code> is then the fraction of the path before the coast), false when it stays on water, and null when there is no projection or the start position falls on mapped land (unresolved); the projection itself is never altered.</p><ul><li><a href="/vessels?limit=500">GET /vessels</a>: optional mmsi, from_time, to_time, limit (1–1000, default 100). ISO dates use UTC unless an offset is supplied. Time filters select the current snapshot, with a two-hour default range.</li><li>GET /vessels/{MMSI}: one vessel, or 404.</li><li><a href="/vessels/download?format=csv">GET /vessels/download</a>: format=json|csv, with the same MMSI and time filters, up to 10000 rows.</li><li><a href="/meta">GET /meta</a>: mode and prediction horizon.</li><li><a href="/health">GET /health</a>: upstream availability (503 when unavailable).</li></ul><p>The edge API uses no historical database or trained model. Ship type is unknown in the location feed. Upstream failures return 503.</p><p>Source: <a href="https://www.digitraffic.fi/en/marine-traffic/">Fintraffic Digitraffic</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Coastline: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, ODbL.</p></main></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     const detailMatch = /^\/vessels\/([^/]+)$/.exec(url.pathname);
     const download = url.pathname === '/vessels/download';
     const health = url.pathname === '/health';

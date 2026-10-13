@@ -205,6 +205,16 @@ test('metadata identifies synthetic demo data without inferring mode from vessel
     assert.match(app.elements.get('mode-banner').textContent, /synthetic/i);
 });
 
+test('popup notes a coast ahead only when the projection is flagged as crossing land', () => {
+    const app = dashboard();
+    const fix = { predicted_latitude: 60, predicted_longitude: 22.1, prediction_method: 'dead_reckoning',
+        prediction_for_timestamp: new Date(Date.now() + 1800000).toISOString() };
+    app.context.flagged = vessel(1, { ...fix, projection_land_conflict: true });
+    app.context.clear = vessel(2, { ...fix, projection_land_conflict: false });
+    assert.match(app.run('createPopupContent(flagged).innerHTML'), /Coast ahead: straight-line estimate crosses land/);
+    assert.doesNotMatch(app.run('createPopupContent(clear).innerHTML'), /Coast ahead/);
+});
+
 test('basemap requests public OpenStreetMap tiles and credits the contributor source', () => {
     const requests = [];
     const map = { setView() { return this; } };
