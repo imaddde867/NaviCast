@@ -48,13 +48,22 @@ def _meta_row(day=DAY):
     fetched = scheduled + 2000
     stamp = dt.datetime.fromtimestamp(fetched / 1000, tz=dt.timezone.utc).isoformat(timespec="milliseconds").replace(
         "+00:00", "Z")
-    record = {"mmsi": 230000002, "lat": 61.0, "lon": 25.0, "timestampExternal": scheduled,
-              "sog": 8.0, "cog": 180.0}
+    record = {"mmsi": 230000002, "name": "FIXTURE", "callSign": "OHXX", "imo": 1000001,
+              "shipType": 70, "destination": "HELSINKI", "draught": 45, "eta": 123456, "timestamp": scheduled}
     body = _gzip_json({"schema": 1, "source": "metadata fixture", "fetched_at": stamp,
                        "count": 1, "vessels": [record]})
     return {"key": f"meta/{day.replace('-', '/')}.json.gz", "kind": "meta",
             "scheduled_at": scheduled, "fetched_at": fetched, "data_updated_at": None,
             "count": 1, "body_hex": body.hex().upper()}
+
+
+def _bad_meta_row(vessel):
+    row = _meta_row()
+    stamp = dt.datetime.fromtimestamp(row["fetched_at"] / 1000, tz=dt.timezone.utc).isoformat(
+        timespec="milliseconds").replace("+00:00", "Z")
+    row["body_hex"] = _gzip_json({"schema": 1, "source": "metadata fixture", "fetched_at": stamp,
+                                  "count": 1, "vessels": [vessel]}).hex().upper()
+    return row
 
 
 def _fake_cloudflare(rows, page_sizes, expected_day=DAY):
@@ -139,6 +148,20 @@ def test_malformed_gzip_and_count_are_rejected_without_manifest(monkeypatch, tmp
         download_d1.download_day("account123", "00000000-0000-0000-0000-000000000001", DAY,
                                  output, backup, TOKEN, 1)
 
+    assert not list(tmp_path.rglob("manifest-*.json"))
+
+
+def test_metadata_without_lat_lon_is_accepted(monkeypatch, tmp_path):
+    manifest, _, _, _ = _run(monkeypatch, [_meta_row()], tmp_path)
+    assert [entry["kind"] for entry in manifest["files"]] == ["meta"]
+
+
+@pytest.mark.parametrize("vessel", [{"name": "NO MMSI"}, {"mmsi": 0}, {"mmsi": 1000000000}, {"mmsi": "230000002"}, []])
+def test_metadata_rejects_invalid_mmsi(monkeypatch, tmp_path, vessel):
+    monkeypatch.setattr(download_d1.urllib.request, "urlopen", _fake_cloudflare([_bad_meta_row(vessel)], []))
+    with pytest.raises(ValueError, match="invalid MMSI|must be an object"):
+        download_d1.download_day("account123", "00000000-0000-0000-0000-000000000001", DAY,
+                                 tmp_path / "primary", tmp_path / "backup", TOKEN, 1)
     assert not list(tmp_path.rglob("manifest-*.json"))
 
 

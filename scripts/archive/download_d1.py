@@ -53,12 +53,16 @@ def _header_time_ms(value):
     return int(parsed.timestamp() * 1000)
 
 
-def _validate_record(record):
+def _validate_mmsi(record):
     if not isinstance(record, dict):
         raise ValueError("archive record must be an object")
     mmsi = record.get("mmsi")
     if not isinstance(mmsi, int) or isinstance(mmsi, bool) or not 0 < mmsi <= 999999999:
         raise ValueError("archive record has invalid MMSI")
+
+
+def _validate_record(record):
+    _validate_mmsi(record)
     for name, lower, upper in (("lat", -90, 90), ("lon", -180, 180)):
         value = record.get(name)
         if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
@@ -173,7 +177,7 @@ def _validate_blob(row, day):
                 or isinstance(wrapper_count, bool) or wrapper_count != count or len(vessels) != count):
             raise ValueError("metadata wrapper count does not match the D1 row")
         for record in vessels:
-            _validate_record(record)
+            _validate_mmsi(record)  # metadata feed has no lat/lon
         return body, source.strip(), count
 
     raise ValueError("archive row has unknown kind")
