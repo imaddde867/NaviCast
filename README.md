@@ -68,7 +68,7 @@ For a running demo, `GET /meta` should report `mode: demo` and `prediction_metho
 
 - Demo positions and speeds are synthetic. Their timestamps are generated relative to the current time.
 - Predictions are straight-line dead-reckoning estimates for 30 minutes. They are illustrative and must not be used for navigation or safety decisions.
-- No trained model is served. Coast conflicts are not yet flagged on the live site; the land-mask flag remains a draft prototype in [PR #29](https://github.com/imaddde867/NaviCast/pull/29).
+- No trained model is served. The Worker flags projections whose straight line crosses land (`projection_land_conflict`, `projection_clear_until_fraction`) using an OpenStreetMap-derived land mask; the flag is `null` when it cannot be resolved (start on land, or outside the mask area 9–31°E, 53.5–66°N). The mask is approximate (100 m path sampling, inland lakes count as land, small islets can be absent) and the projection itself is never changed; not for navigation.
 - The public Worker API has no authentication. Keep the optional local live API and database on a trusted network.
 - The map uses external Leaflet, icon, and tile services, so full map rendering needs browser network access.
 - `archive/ML_Model.ipynb` and `archive/ML_Model_docs/` contain historical research artifacts. They are not part of serving, and their evaluation is invalid because it used held-out target positions and a random row split.
@@ -87,7 +87,7 @@ The removal-request contact route and the policy for exclusion/deletion from pub
 
 Source: [Fintraffic / digitraffic.fi](https://www.digitraffic.fi/en/marine-traffic/), license [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), following [Digitraffic's attribution terms](https://www.digitraffic.fi/en/terms-of-service/). NaviCast filters and normalizes observations and adds constant-course estimates. The committed `scripts/baseline/vessels_*.json` fixture derives from this source; its identifiers are pseudonymized and unused fields removed. Estimates and upstream data have no guarantee of accuracy and must not be used for navigation.
 
-Map tiles credit OpenStreetMap contributors. The proposed OSM-derived land mask in PR #29 is licensed ODbL 1.0, separately from this repository's MIT code licence; its NOTICE and footer credit must accompany that asset before merge. The mask is not present on this branch. No IEEE DataPort or DMA dataset is committed; their licence/access checks remain open in [#15](https://github.com/imaddde867/NaviCast/issues/15).
+Map tiles credit OpenStreetMap contributors. The OSM-derived land mask `cloudflare/land_mask.json` is licensed ODbL 1.0, separately from this repository's MIT code licence; see `cloudflare/LAND_MASK_NOTICE.md`, and the map footer credits OpenStreetMap and the ODbL. No IEEE DataPort or DMA dataset is committed; their licence/access checks remain open in [#15](https://github.com/imaddde867/NaviCast/issues/15).
 
 Optional database integration checks use `NAVICAST_TEST_DSN` pointing to a disposable PostgreSQL instance; they create session-local temporary tables. CI runs these checks with PostgreSQL 16.
 
@@ -100,3 +100,4 @@ The runtime is pinned in `requirements.lock`. Regenerate it with `uv pip compile
 - `archive/README.md` — historical model exploration and invalid evaluation
 - `docs/roadmap/ROADMAP.md` — shared roadmap and issue order
 - `LICENSE` — MIT license
+- `cloudflare/LAND_MASK_NOTICE.md` — OpenStreetMap ODbL notice for the land mask

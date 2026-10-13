@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import worker, { loadRawSnapshot } from '../cloudflare/worker.mjs';
 import { fakeD1 } from './fake_d1.mjs';
+import { isLand, pathHitsLand, clearUntilFraction, maskInfo } from '../cloudflare/landmask.mjs';
 
 const now = Date.now();
 const sourceTime = now - 60_000;
@@ -213,6 +214,7 @@ test('CSV and JSON exports use the same filters and known AIS fields', async t =
   const lines = (await csv.text()).trim().split('\r\n');
   assert.equal(lines.length, 2);
   assert.match(lines[0], /^vessel_id,current_latitude,current_longitude,current_timestamp,sog,cog,heading,/);
+  assert.match(lines[0], /,prediction_made_at,projection_land_conflict,projection_clear_until_fraction$/);
   assert.match(lines[1], /^230123456,60,24,/);
   assert.match(lines[1], /Unknown,,Finland,ais,dead_reckoning/);
   const empty = await h.request('/vessels/download?format=csv&mmsi=0');
@@ -408,4 +410,56 @@ test('non-GET API requests reject with 405 without upstream work', async t => {
   assert.equal(response.status, 405);
   assert.equal(response.headers.get('Allow'), 'GET');
   assert.equal(h.calls.length, 0);
+});
+
+test('projections across land are flagged with the clear fraction but never dropped', async t => {
+  // West of Gotland heading east at 30 kn: the 30-minute straight line ends inside the island.
+  const h = harness(t, [feature(230123456, { sog: 30, cog: 90 }, [17.9, 57.6])]);
+  const [vessel] = await (await h.request()).json();
+  assert.equal(vessel.prediction_method, 'dead_reckoning');
+  assert.ok(vessel.predicted_longitude > 18.3);
+  assert.equal(vessel.projection_land_conflict, true);
+  assert.ok(vessel.projection_clear_until_fraction > 0.4 && vessel.projection_clear_until_fraction < 0.8,
+    String(vessel.projection_clear_until_fraction));
+});
+
+test('vessels projected outside the mask area get null, not a false all-clear', async t => {
+  // Inside the Worker's 50-70N region but north of the mask's 66N edge.
+  assert.equal(isLand(66.5, 24.0), null); // precondition: start is outside the mask
+  const h = harness(t, [feature(230123459, { sog: 12, cog: 90 }, [24.0, 66.5])]);
+  const [vessel] = await (await h.request()).json();
+  assert.equal(vessel.prediction_method, 'dead_reckoning');
+  assert.equal(vessel.projection_land_conflict, null);
+  assert.equal(vessel.projection_clear_until_fraction, null);
+});
+
+test('open-water, unresolved-start and unprojected vessels get false or null land flags', async t => {
+  assert.equal(isLand(58.5, 20.0), false); // preconditions: water start, and Helsinki start on land
+  assert.equal(isLand(60.1695, 24.9525), true);
+  const h = harness(t, [feature(230123456, { sog: 12, cog: 90 }, [20.0, 58.5]), // Baltic proper
+    feature(230123457, { sog: 8, cog: 90 }, [24.9525, 60.1695]), // Helsinki: start on land => unresolved
+    feature(230123458, { sog: 0.1 }, [20.0, 58.5])]); // no projection
+  const byId = Object.fromEntries((await (await h.request()).json()).map(v => [v.vessel_id, v]));
+  assert.equal(byId[230123456].projection_land_conflict, false);
+  assert.equal(byId[230123456].projection_clear_until_fraction, null);
+  assert.equal(byId[230123457].prediction_method, 'dead_reckoning');
+  assert.equal(byId[230123457].projection_land_conflict, null);
+  assert.equal(byId[230123457].projection_clear_until_fraction, null);
+  assert.equal(byId[230123458].prediction_method, null);
+  assert.equal(byId[230123458].projection_land_conflict, null);
+});
+
+test('land mask covers 9..31E 53.5..66N and returns null (unknown) outside it', () => {
+  assert.deepEqual(maskInfo.bbox, { west: 9, south: 53.5, east: 31, north: 66 });
+  assert.equal(isLand(57.5, 18.5), true); // Gotland interior
+  assert.equal(isLand(58.5, 20.0), false); // Baltic proper
+  for (const [lat, lon] of [[50, 20], [70, 20], [60, 8], [60, 32], [53.49, 20], [NaN, 20]]) {
+    assert.equal(isLand(lat, lon), null, `${lat},${lon}`);
+  }
+  assert.equal(pathHitsLand(50, 10, 51, 12), null); // entirely outside mask: unknown, not clear
+  assert.equal(pathHitsLand(58.0, 9.1, 58.0, 8.8), null); // leaves the mask in open water: unknown
+  assert.equal(clearUntilFraction(50, 10, 51, 12), null);
+  assert.equal(pathHitsLand(57.5, 18.5, 57.5, 18.6), null); // start on land: unresolved
+  assert.equal(pathHitsLand(57.6, 17.9, 57.6, 18.4), true);
+  assert.equal(clearUntilFraction(58.5, 20, 58.5, 20.2), null);
 });

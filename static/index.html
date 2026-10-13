@@ -908,7 +908,7 @@
         L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
         const tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | Source: <a href="https://www.digitraffic.fi/en/marine-traffic/">Fintraffic / digitraffic.fi</a>, license <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> (filtered observations; constant-course estimates added)',
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | Coastline flags derived from OSM land polygons, <a href="https://opendatacommons.org/licenses/odbl/1-0/">ODbL</a> | Source: <a href="https://www.digitraffic.fi/en/marine-traffic/">Fintraffic / digitraffic.fi</a>, license <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> (filtered observations; constant-course estimates added)',
             maxZoom: 19
         });
         // Initial theme is set in initializeApp.
@@ -990,7 +990,7 @@
                 
             vessels.forEach(vessel => {
                 vessel.marker?.setStyle({ color: borderColor });
-                vessel.predictionMarker?.setStyle({ color: borderColor });
+                vessel.predictionMarker?.setStyle({ color: vessel.data?.projection_land_conflict === true ? '#8a8a8a' : borderColor });
             });
         }
 
@@ -1276,7 +1276,8 @@
                 predictedPos: predictedPos ? `${formatCoordinate(predictedPos[0])}, ${formatCoordinate(predictedPos[1])}` : 'N/A',
                 predTime: predictionDetails.time,
                 predSource: predictionDetails.source,
-                predMade: predictionDetails.made
+                predMade: predictionDetails.made,
+                landConflict: showPredictionSection && vesselData.projection_land_conflict === true
             };
 
             // Use template literal for cleaner HTML structure
@@ -1304,6 +1305,7 @@
                             ${popupData.predTime ? `<div>Projection for: ${escapeHtml(popupData.predTime)}</div>` : ''}
                             ${popupData.predSource ? `<div>Source: ${escapeHtml(popupData.predSource)}</div>` : ''}
                             ${popupData.predMade ? `<div>Made: ${escapeHtml(popupData.predMade)}</div>` : ''}
+                            ${popupData.landConflict ? '<div><i class="fas fa-triangle-exclamation"></i> Coast ahead: straight-line estimate crosses land</div>' : ''}
                         </div>
                     </div>
                 ` : ''}
@@ -1770,14 +1772,16 @@
                  const predictionColor = getComputedStyle(document.documentElement).getPropertyValue('--prediction-color').trim();
                 
                  // Create and add the dashed line
+                 const landConflict = vessel.data?.projection_land_conflict === true;
                  vessel.predictionLine = L.polyline([displayPos, predictedPos], { 
-                     color: predictionColor, dashArray: '5,5', weight: 2, opacity: 0.7 
+                     color: landConflict ? '#8a8a8a' : predictionColor, dashArray: landConflict ? '2,8' : '5,5', weight: 2, opacity: 0.7 
                  });
                  addLayer(vessel.predictionLine);
 
                  // Create and add the prediction end marker
                  vessel.predictionMarker = createVesselMarker(predictedPos, true); // isPrediction = true
                  addLayer(vessel.predictionMarker);
+                 if (landConflict) vessel.predictionMarker.setStyle({ fillOpacity: 0, fillColor: '#8a8a8a', color: '#8a8a8a' }); // hollow grey: crosses land
                  vessel.predictionMarker.bindTooltip(`${PREDICTION_HOURS_AHEAD * 60} min ahead`, { 
                      direction: 'top', permanent: false 
                  });

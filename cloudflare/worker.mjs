@@ -1,4 +1,5 @@
 import countries from './countries.json' with { type: 'json' };
+import { scanPath } from './landmask.mjs';
 import { collectMetadata, collectSnapshot } from './collector.mjs';
 
 const UPSTREAM = 'https://meri.digitraffic.fi/api/ais/v1/locations';
@@ -67,13 +68,18 @@ function normalize(features, fetchedAt) {
       predicted_longitude: null,
       prediction_for_timestamp: null,
       prediction_made_at: null,
+      projection_land_conflict: null,
+      projection_clear_until_fraction: null,
     };
     if (sog !== null && sog >= 0.5 && cog !== null) {
       const distance = sog * 0.51444 * 1800;
       const deltaLat = distance * Math.cos(cog * Math.PI / 180) / 111111;
       const deltaLon = distance * Math.sin(cog * Math.PI / 180) / (111111 * Math.cos(lat * Math.PI / 180));
       if (Math.abs(deltaLat) <= 0.5 && Math.abs(deltaLon) <= 0.5 && inRegion(lat + deltaLat, lon + deltaLon)) {
+        const { conflict, clear } = scanPath(lat, lon, lat + deltaLat, lon + deltaLon);
         Object.assign(vessel, {
+          projection_land_conflict: conflict,
+          projection_clear_until_fraction: clear === null ? null : Math.round(clear * 1000) / 1000,
           prediction_method: 'dead_reckoning',
           predicted_latitude: lat + deltaLat,
           predicted_longitude: lon + deltaLon,
@@ -152,7 +158,7 @@ async function loadSnapshot() {
 }
 
 async function snapshot(url, ctx) {
-  const key = new Request(new URL('/__navicast_ais_snapshot_v1', url.origin));
+  const key = new Request(new URL('/__navicast_ais_snapshot_v2', url.origin));
   const cached = await caches.default.match(key);
   if (cached) {
     const result = await cached.json();
@@ -235,7 +241,7 @@ export default {
     const url = new URL(request.url);
     if (request.method !== 'GET') return json({ detail: 'Method not allowed' }, 405, { Allow: 'GET' });
     if (url.pathname === '/meta') return json({ mode: 'live', prediction_method: 'dead_reckoning', prediction_horizon_minutes: 30, observation_stale_after_seconds: 300 });
-    if (url.pathname === '/docs') return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>NaviCast API</title><main><h1>NaviCast live API</h1><p>Digitraffic AIS observations in the Baltic region, cached for up to 30 seconds. Only observations from the last 30 minutes are returned. Constant speed and course projections target 30 minutes after the source observation; unavailable motion produces no projection.</p><ul><li><a href="/vessels?limit=500">GET /vessels</a>: optional mmsi, from_time, to_time, limit (1–1000, default 100). ISO dates use UTC unless an offset is supplied. Time filters select the current snapshot, with a two-hour default range.</li><li>GET /vessels/{MMSI}: one vessel, or 404.</li><li><a href="/vessels/download?format=csv">GET /vessels/download</a>: format=json|csv, with the same MMSI and time filters, up to 10000 rows.</li><li><a href="/meta">GET /meta</a>: mode and prediction horizon.</li><li><a href="/health">GET /health</a>: archive freshness, 200 when the newest archived AIS snapshot is under five minutes old, otherwise 503.</li></ul><p>The edge API uses no historical database or trained model. Ship type is unknown in the location feed. Upstream failures return 503.</p><p>Source: <a href="https://www.digitraffic.fi/en/marine-traffic/">Fintraffic / digitraffic.fi</a>, license <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Observations are filtered and normalized; constant-course estimates are added. Data and estimates are not for navigation.</p></main></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    if (url.pathname === '/docs') return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>NaviCast API</title><main><h1>NaviCast live API</h1><p>Digitraffic AIS observations in the Baltic region, cached for up to 30 seconds. Only observations from the last 30 minutes are returned. Constant speed and course projections target 30 minutes after the source observation; unavailable motion produces no projection. <code>projection_land_conflict</code> is true when the straight-line projection crosses land in an OpenStreetMap coastline mask (<code>projection_clear_until_fraction</code> is then the fraction of the path before the coast), false when no land was found along it inside the mask area (9–31°E, 53.5–66°N), and null when it cannot be resolved: no projection, a start position on mapped land, or a path that leaves the mask area before reaching land (positions outside the mask are unknown, not assumed to be water). The mask is approximate: the path is sampled every 100 m, inland lakes count as land, and islets smaller than a 0.001° grid cell can be absent, so a clear flag is not a guarantee. The projection itself is never altered and the flags are not for navigation.</p><ul><li><a href="/vessels?limit=500">GET /vessels</a>: optional mmsi, from_time, to_time, limit (1–1000, default 100). ISO dates use UTC unless an offset is supplied. Time filters select the current snapshot, with a two-hour default range.</li><li>GET /vessels/{MMSI}: one vessel, or 404.</li><li><a href="/vessels/download?format=csv">GET /vessels/download</a>: format=json|csv, with the same MMSI and time filters, up to 10000 rows.</li><li><a href="/meta">GET /meta</a>: mode and prediction horizon.</li><li><a href="/health">GET /health</a>: archive freshness, 200 when the newest archived AIS snapshot is under five minutes old, otherwise 503.</li></ul><p>The edge API uses no historical database or trained model. Ship type is unknown in the location feed. Upstream failures return 503.</p><p>Source: <a href="https://www.digitraffic.fi/en/marine-traffic/">Fintraffic / digitraffic.fi</a>, license <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Observations are filtered and normalized; constant-course estimates are added. Data and estimates are not for navigation. Coastline flags: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, ODbL.</p></main></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     const detailMatch = /^\/vessels\/([^/]+)$/.exec(url.pathname);
     const download = url.pathname === '/vessels/download';
     if (url.pathname === '/health') return health(env);
