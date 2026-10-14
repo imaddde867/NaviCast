@@ -51,3 +51,16 @@ Protection and the merge-blocking probe are **pending**, not claimed complete.
 No real-data forecasting quality evaluation has run; source-coastline
 regeneration is pending the original ZIP. Production deployment still requires
 manual owner approval through the existing deployment process.
+
+## Verified GitHub execution
+
+[Run 38603815976](https://github.com/imaddde867/NaviCast/actions/runs/38603815976)
+passed all five jobs on the reviewed pipefail fix `82c483f` (2026-10-14).
+Python **3.11.17** ran 142 tests in 2.96 s; Node ran 83 in 966.93 ms;
+Chromium ran 12 in 14.6 s; workerd/D1 ran 12. All testcase inventories and
+Python/Node/browser coverage gates passed, with no skips/deselections.
+All four projection, three browser and three scientific mutations were detected.
+Docker HTTP smoke and the 574,527-byte bundle passed inside CI.
+Whole-job durations: Python 42 s, Node 15 s, runtime 14 s, browser 80 s,
+build 30 s. These first measurements include setup/uploads and are not an
+established performance budget; timeouts bound jobs to 10/15 minutes.
