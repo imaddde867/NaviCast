@@ -414,3 +414,16 @@ test('processVesselData returns only the processed id set', () => {
     assert.equal(keys2.length, 1);
     assert.equal(keys2[0], 'processedVesselIds');
 });
+
+test('expired projections refresh the fleet-wide projection count', () => {
+    const app = dashboard();
+    const target = new Date(Date.now() + 1800000).toISOString();
+    app.context.batch = Array.from({ length: 600 }, (_, i) => vessel(i + 1, {
+        predicted_latitude: 60, predicted_longitude: 22.1, prediction_for_timestamp: target
+    }));
+    app.run('processVesselData(batch, 0); updateUIComponents()');
+    assert.equal(app.run('vessels.size'), 500);
+    assert.equal(app.elements.get('prediction-count').textContent, 600);
+    app.run('vessels.get(1).data.current_timestamp = "2020-01-01T00:00:00Z"; updateTimeDisplays()');
+    assert.equal(app.elements.get('prediction-count').textContent, 599);
+});

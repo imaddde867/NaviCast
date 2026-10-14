@@ -1051,9 +1051,7 @@
             if (projectionsExpired) {
                 updateFilterCounts();
                 applyVesselFilter();
-                const count = latestApiVessels.filter(data => determinePrediction(data).predictedPos !== null).length;
-                document.getElementById('prediction-count').textContent = count;
-                updatePredictionStatus(count);
+                updateProjectionStats();
             }
             if (lastUpdateTimestamp) updateFeedStatus();
             const currentTimeEl = document.getElementById('current-time');
@@ -1738,23 +1736,18 @@
             
             // 1. Update Header Stats
             const vesselCountEl = document.getElementById('vessel-count');
-            const predictionCountEl = document.getElementById('prediction-count');
             if (vesselCountEl) vesselCountEl.textContent = availableVesselCount;
-            const projectionCount = latestApiVessels.filter(data => determinePrediction(data).predictedPos !== null).length;
-            if (predictionCountEl) predictionCountEl.textContent = projectionCount;
-            
-            // 2. Update System Status in Control Panel
-            updatePredictionStatus(projectionCount);
+            updateProjectionStats();
 
-            // 3. Update Filter Counts
+            // 2. Update Filter Counts
             updateFilterCounts();
-            
-            // 4. Re-apply the currently active filter to reflect updated vessel states
+
+            // 3. Re-apply the currently active filter to reflect updated vessel states
             applyVesselFilter();
             updateFeedStatus();
             updateRenderNotice();
 
-            // 5. Update Time Displays in Footer
+            // 4. Update Time Displays in Footer
             updateTimeDisplays();
         }
 
