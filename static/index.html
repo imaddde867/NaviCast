@@ -661,7 +661,14 @@
             border-bottom: 1px solid var(--panel-border); z-index: 1000; font-size: 0.8rem; line-height: 1.4;
         }
         #mode-banner { max-width: 740px; }
-        .mode-note { font-size: 0.72rem; opacity: 0.75; white-space: nowrap; }
+        .mode-note { font-size: 0.72rem; white-space: nowrap; }
+        #render-notice {
+            position: fixed; top: calc(72px + var(--banner-height)); left: 16px; z-index: 999;
+            max-width: min(620px, calc(100vw - 32px)); box-sizing: border-box; padding: 10px 14px;
+            background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.18); font-size: 0.8rem; line-height: 1.4;
+        }
+        #render-notice[hidden] { display: none; }
         .control-panel .control-section, .projection-note { margin-left: 20px; }
         .control-panel.collapsed .control-section,
         .control-panel.collapsed .projection-note { display: none; }
@@ -686,7 +693,7 @@
         .leaflet-popup-content { line-height: 1.5; }
         .popup-prediction { font-size: 0.85rem; }
         @media (max-width: 1000px) {
-            .mode-note, .current-time { display: none; }
+            .current-time { display: none; }
             .time-footer { gap: 12px; }
         }
         @media (max-width: 640px) {
@@ -696,7 +703,9 @@
             .title { font-size: 1.1rem; }
             .subtitle { font-size: 0.65rem; }
             .stats { font-size: 0.7rem; gap: 4px; }
-            .mode-strip { padding: 8px 12px; font-size: 0.73rem; }
+            .mode-strip { padding: 8px 12px; font-size: 0.73rem; gap: 8px; }
+            .mode-note { white-space: normal; max-width: 120px; flex-shrink: 0; font-size: 0.68rem; }
+            #render-notice { left: 12px; max-width: calc(100vw - 24px); }
             .control-panel { top: auto; bottom: 68px; right: 12px; width: 300px;
                 max-height: calc(100dvh - 240px); }
             .control-panel.collapsed { top: calc(80px + var(--banner-height)); bottom: auto; }
@@ -735,9 +744,10 @@
 
     <div class="mode-strip">
         <div><span id="mode-banner" role="status">Checking feed mode…</span><span id="fetch-error" role="status" style="display: none;"></span></div>
-        <span class="mode-note">For exploration · not for navigation</span>
+        <strong class="mode-note">Not for navigation · illustrative estimates only</strong>
     </div>
-    <main id="map" aria-label="Baltic vessel positions and constant-course projections"></main>
+    <div id="render-notice" role="status" aria-live="polite" hidden></div>
+    <main id="map" aria-label="Baltic vessel positions and server-provided projections"></main>
 
     <aside class="control-panel" id="control-panel" aria-label="Map settings and feed status">
         <button type="button" class="panel-toggle" id="panel-toggle" aria-label="Toggle map settings" aria-controls="control-panel" aria-expanded="true" title="Toggle settings (P)">
@@ -747,7 +757,7 @@
         <div class="control-section">
             <div class="control-title">Quick Filters</div>
             <div class="quick-filters">
-                <button type="button" class="filter-button active" id="filter-all" aria-pressed="true">All Vessels</button>
+                <button type="button" class="filter-button active" id="filter-all" aria-pressed="true">All on map</button>
                 <button type="button" class="filter-button" id="filter-moving" aria-pressed="false">Moving</button>
                 <button type="button" class="filter-button" id="filter-stationary" aria-pressed="false">Stationary</button>
                 <button type="button" class="filter-button" id="filter-predictable" aria-pressed="false">Projected</button>
@@ -867,7 +877,8 @@
         const UPDATE_INTERVAL_MS = 10000; // 10 seconds
         const COUNTDOWN_SECONDS = 10;
         const FETCH_TIMEOUT_MS = 8000; // Abort /vessels fetch after this long
-        let observationStaleAfterMs = 60000; // AIS timestamp older than this counts as stale
+        let observationStaleAfterMs = null; // Supplied by /meta; no browser default
+        let predictionHorizonMinutes = null; // Supplied by /meta; no browser default
         const FETCH_BACKOFF_BASE_MS = 10000; // First retry delay after a fetch failure
         const FETCH_BACKOFF_MAX_MS = 120000; // Cap for exponential backoff
         let fetchFailureCount = 0; // Consecutive fetch failures (drives backoff)
@@ -891,7 +902,8 @@
         let activeFilter = 'all'; // Default filter
         let feedMode = null;
         let demoFleetFramed = false;
-        let availableVesselCount = 0;
+        let availableVesselCount = 0; // Exact number returned by /vessels, before render cap
+        let latestApiVessels = []; // Valid API records across the complete response
         let vesselListCapped = false; // True when the render cap trimmed this batch
         let loadingProgressInterval = null; // For loading animation
         
@@ -935,8 +947,7 @@
             startTimers();
             setupEventListeners();
             startLoadingAnimation(); // Show initial loading
-            fetchMetadata();
-            fetchAndDisplayVessels(); // Initial data load
+            fetchAndDisplayVessels(); // Load /meta before evaluating API projections
         }
 
         function startTimers() {
@@ -1129,15 +1140,35 @@
             statusText.textContent = projectionCount > 0 ? 'Ready' : 'No fresh fixes';
         }
 
+
         function updateFeedStatus() {
             const status = document.getElementById('feed-status');
             if (!status) return;
             const staleCount = Array.from(vessels.values()).filter(v => isVesselStale(v.data.current_timestamp)).length;
             const visibleCount = Array.from(vessels.values()).filter(v => map.hasLayer(v.marker)).length;
-            status.textContent = vessels.size === 0 ? 'No vessels in this feed. Waiting for the next update.' :
-                `${visibleCount} vessels visible${vesselListCapped ? ` · displaying ${MAX_RENDERED_VESSELS} of ${availableVesselCount}` : ''}` +
+            status.textContent = availableVesselCount === 0 ? 'No vessels in this feed. Waiting for the next update.' :
+                `${visibleCount} vessels visible (${vessels.size} mapped of ${availableVesselCount} API records)` +
                 (staleCount ? ` · ${staleCount} stale ${feedMode === 'demo' ? 'sample' : 'AIS'} fixes; projections hidden.` :
                     (feedMode === 'demo' ? ' · Sample observations are fresh.' : ' · AIS fixes are fresh.'));
+        }
+
+        function updateRenderNotice() {
+            const notice = document.getElementById('render-notice');
+            const omitted = Math.max(0, availableVesselCount - vessels.size);
+            const apiLimitReached = availableVesselCount >= 1000; // /vessels?limit=1000 is capped server-side
+            notice.hidden = omitted === 0 && !apiLimitReached;
+            notice.textContent = notice.hidden ? '' :
+                `Map displays ${vessels.size} of ${availableVesselCount} vessels returned by the API.` +
+                (omitted ? ` ${omitted} not drawn${vesselListCapped ? ' (500-vessel map limit; invalid or duplicate records may also be excluded)' : ' (invalid or duplicate records)'}.` : '') +
+                ' Filter counts refer to mapped vessels only.' +
+                (apiLimitReached ? ' API response reached its 1,000-vessel limit; the full fleet may be larger.' : '');
+        }
+
+        function updateProjectionStats() {
+            // True API projection count across all valid API records, including off-map vessels.
+            const count = latestApiVessels.filter(data => determinePrediction(data) !== null).length;
+            document.getElementById('prediction-count').textContent = count;
+            updatePredictionStatus(count);
         }
 
         async function fetchMetadata() {
@@ -1149,19 +1180,28 @@
                 if (!response.ok) throw new Error('Metadata unavailable');
                 const metadata = await response.json();
                 if (!['demo', 'live'].includes(metadata.mode)) throw new Error('Unknown feed mode');
-                if (Number.isFinite(metadata.observation_stale_after_seconds) &&
-                    metadata.observation_stale_after_seconds > 0 && metadata.observation_stale_after_seconds <= 1800) {
-                    observationStaleAfterMs = metadata.observation_stale_after_seconds * 1000;
+                const staleSeconds = metadata.observation_stale_after_seconds;
+                const horizonMinutes = metadata.prediction_horizon_minutes;
+                if (!Number.isFinite(staleSeconds) || staleSeconds <= 0 || staleSeconds > 1800 ||
+                    !Number.isFinite(horizonMinutes) || horizonMinutes <= 0 || horizonMinutes > 120) {
+                    throw new Error('Missing or invalid /meta staleness or horizon');
                 }
+                observationStaleAfterMs = staleSeconds * 1000;
+                predictionHorizonMinutes = horizonMinutes;
                 banner.textContent = metadata.mode === 'demo'
-                    ? 'DEMO · Synthetic Baltic vessel positions. Explore constant-course projections, 30 minutes from each fix.'
-                    : 'LIVE · Baltic AIS positions from Digitraffic. Constant-course projections, 30 minutes from each fix.';
+                    ? `DEMO · Synthetic Baltic vessel positions. Server projections, ${horizonMinutes} minutes from each fix.`
+                    : `LIVE · Baltic AIS positions from Digitraffic. Server projections, ${horizonMinutes} minutes from each fix.`;
                 banner.dataset.mode = metadata.mode;
                 feedMode = metadata.mode;
+                hideFetchError();
                 frameDemoFleet();
                 updateFeedStatus();
+                return true;
             } catch (error) {
-                banner.textContent = 'Feed mode unavailable · Constant-course projections assume unchanged speed and direction.';
+                banner.textContent = 'Feed configuration unavailable · projections paused until /meta is valid.';
+                showFetchError('Cannot load /meta configuration; retrying automatically.');
+                updateLoadingProgress(-1);
+                return false;
             } finally {
                 clearTimeout(timeoutId);
             }
@@ -1517,7 +1557,7 @@
         function isVesselStale(currentTimestamp) {
             // Staleness is based on the AIS timestamp delta, not the poll interval:
             // a vessel is stale when its last real AIS update is older than the configured threshold.
-            if (!currentTimestamp) return true;
+            if (observationStaleAfterMs === null || !currentTimestamp) return true;
             const timestamp = Date.parse(currentTimestamp);
             return !Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > observationStaleAfterMs;
         }
@@ -1534,6 +1574,9 @@
 
         async function fetchAndDisplayVessels() {
             if (Date.now() < nextFetchAllowedAt) return; // exponential backoff: skip this poll
+            if (observationStaleAfterMs === null || predictionHorizonMinutes === null) {
+                if (!await fetchMetadata()) return; // Never guess staleness or horizon
+            }
             try {
                 const vesselData = await fetchVesselData();
                 fetchFailureCount = 0; // reset backoff on success
