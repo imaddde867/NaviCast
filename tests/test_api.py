@@ -11,6 +11,8 @@ def test_demo_metadata_and_fleet():
     meta = client.get('/meta')
     assert meta.status_code == 200
     assert meta.json()['mode'] == 'demo'
+    assert meta.json()['observation_stale_after_seconds'] == 300
+    assert meta.json()['prediction_horizon_minutes'] == 30
     vessels = client.get('/vessels').json()
     assert len(vessels) == 4
     assert all(v['data_source'] == 'synthetic' for v in vessels)
