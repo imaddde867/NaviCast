@@ -129,16 +129,19 @@ def dead_reckon(lat, lon, sog, cog, seconds):
 def score(tracks):
     """horizon_min -> dict of equal-length arrays: sog, mmsi, t, persistence, dead_reckoning (metres)."""
     out = {h: {k: [] for k in ("sog", "mmsi", "t", *PREDICTORS)} for h in HORIZONS_MIN}
+    counts = {h: dict(origins=0, invalid_motion=0, unmatched_targets=0, matched=0) for h in HORIZONS_MIN}
     for mmsi, (t, lat, lon, sog, cog) in tracks.items():
         valid = (sog >= 0.5) & (sog < 102.3) & (cog >= 0) & (cog < 360)  # NaN compares False
-        if not valid.any():
-            continue
         for h in HORIZONS_MIN:
             target = t + h * 60_000
             hi = np.clip(np.searchsorted(t, target), 0, len(t) - 1)
             lo = np.clip(hi - 1, 0, len(t) - 1)
             pick = np.where(np.abs(t[hi] - target) < np.abs(t[lo] - target), hi, lo)
             ok = valid & (np.abs(t[pick] - target) <= TOLERANCE_MS)
+            counts[h]['origins'] += len(t)
+            counts[h]['invalid_motion'] += int((~valid).sum())
+            counts[h]['unmatched_targets'] += int((valid & ~ok).sum())
+            counts[h]['matched'] += int(ok.sum())
             if not ok.any():
                 continue
             # dead reckoning projects over the real elapsed time to the matched observation
@@ -150,11 +153,13 @@ def score(tracks):
             rec["sog"].append(sog[ok])
             rec["t"].append(t[ok])
             rec["mmsi"].append(np.full(ok.sum(), mmsi, dtype=np.int64))
-    return {h: {k: np.concatenate(v) if v else np.array([]) for k, v in rec.items()} for h, rec in out.items()}
+    return {h: {**{k: np.concatenate(v) if v else np.array([]) for k, v in rec.items()},
+                'accounting': counts[h]} for h, rec in out.items()}
 
 
 def summarize(scored):
     def pct(x):
+        x = x[np.isfinite(x)]
         return {"median": float(np.median(x)), "p90": float(np.percentile(x, 90)),
                 "p95": float(np.percentile(x, 95))} if len(x) else None
     result = {}
@@ -162,19 +167,24 @@ def summarize(scored):
         rows = {"all": np.ones(len(rec["sog"]), dtype=bool)}
         rows.update({name: (rec["sog"] >= lo) & (rec["sog"] < hi) for name, lo, hi in BUCKETS})
         result[str(h)] = {
-            name: {"n": int(mask.sum()), **{p: pct(rec[p][mask]) for p in PREDICTORS}}
+            name: {"n": int(mask.sum()),
+                   "missing_predictions": {p: int((~np.isfinite(rec[p][mask])).sum()) for p in PREDICTORS},
+                   "coverage": {p: float(np.isfinite(rec[p][mask]).mean()) if mask.any() else None for p in PREDICTORS},
+                   **{p: pct(rec[p][mask]) for p in PREDICTORS}}
             for name, mask in rows.items()}
+        result[str(h)]['all']['accounting'] = rec['accounting']
     return result
 
 
 def markdown(summary):
     fmt = lambda s, k: "-" if s is None else f"{s[k]:.0f}"
-    lines = ["| horizon | sog (kn) | n | persistence median | p90 | p95 | dead_reckoning median | p90 | p95 |",
-             "|---|---|---|---|---|---|---|---|---|"]
+    lines = ["| horizon | sog (kn) | matched n | persistence coverage | dead_reckoning coverage | persistence median | p90 | p95 | dead_reckoning median | p90 | p95 |",
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
     for h, rows in summary.items():
         for name, row in rows.items():
             p, d = row["persistence"], row["dead_reckoning"]
-            lines.append(f"| {h} min | {name} | {row['n']} | " + " | ".join(
+            coverage = ' | '.join('-' if row['coverage'][p] is None else f"{row['coverage'][p]:.1%}" for p in PREDICTORS)
+            lines.append(f"| {h} min | {name} | {row['n']} | {coverage} | " + " | ".join(
                 [fmt(p, "median"), fmt(p, "p90"), fmt(p, "p95"), fmt(d, "median"), fmt(d, "p90"), fmt(d, "p95")]) + " |")
     return "\n".join(lines) + "\n\nErrors in metres.\n"
 
@@ -186,6 +196,15 @@ def evaluate(spec):
     return {"files": len(paths), "vessels": len(tracks),
             "observations": sum(len(v[0]) for v in tracks.values()),
             "horizons": summarize(score(tracks)),
+            "evaluation_rules": {
+                "version": "prototype-1", "validation_status": "unvalidated",
+                "horizons_minutes": list(HORIZONS_MIN), "target_tolerance_ms": TOLERANCE_MS,
+                "target_tie": "earlier", "projection_elapsed": "matched_observation",
+                "percentile_method": "linear", "error_units": "metres",
+                "earth_radius_m": EARTH_RADIUS_M, "knots_to_mps": KN_TO_MS,
+                "metres_per_degree": M_PER_DEG, "production_caps": "not_applied",
+                "prediction_population": "identical_matched_rows_with_counted_abstentions",
+            },
             "data_attribution": describe_provenance(provenance)}, tracks
 
 
@@ -199,6 +218,7 @@ def main(argv=None):
         print(f"no observations found under {args.input!r}", file=sys.stderr)
         return 2
     print(f"{result['files']} files, {result['vessels']} vessels, {result['observations']} unique observations\n")
+    print('Evaluation rule prototype-1: unvalidated; software/synthetic checks do not establish forecasting accuracy.')
     print(markdown(result["horizons"]))
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:
