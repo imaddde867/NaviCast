@@ -203,7 +203,8 @@ test('mobile navigation disclaimer and essential controls are visible', async ({
   await expect(page.getByText('Not for navigation · illustrative estimates only', { exact: true })).toBeInViewport();
   await expect(page.getByRole('button', { name: 'Toggle map settings' })).toBeInViewport();
   await page.getByRole('button', { name: 'Toggle map settings' }).click();
-  await expect(page.getByRole('button', { name: 'All on map (1)', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Center on Finland' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'All on map (1)', exact: true })).toBeInViewport();
+  await expect(page.getByRole('button', { name: 'Center on Finland' })).toBeInViewport();
+  await expect(page.getByText('Show projections', { exact: true })).toBeInViewport();
   await expect(page.getByLabel('Show projections', { exact: true })).toBeAttached();
 });
