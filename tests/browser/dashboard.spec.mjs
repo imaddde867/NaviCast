@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 const now = Date.UTC(2026, 9, 14, 12);
@@ -6,6 +6,15 @@ const metadata = { mode: 'live', prediction_method: 'dead_reckoning',
   prediction_horizon_minutes: 30, observation_stale_after_seconds: 300 };
 const leaflet = new URL('../../node_modules/leaflet/dist/', import.meta.url);
 const tile = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jA8sAAAAASUVORK5CYII=', 'base64');
+
+test.beforeEach(async ({ page }) => {
+  await page.coverage.startJSCoverage({ resetOnNavigation: false });
+});
+test.afterEach(async ({ page }, info) => {
+  const entries = await page.coverage.stopJSCoverage();
+  mkdirSync(info.outputDir, { recursive: true });
+  writeFileSync(info.outputPath('js-coverage.json'), JSON.stringify(entries));
+});
 
 function vessel(id = 230000001, changes = {}) {
   return { vessel_id: id, current_latitude: 59.5, current_longitude: 20,

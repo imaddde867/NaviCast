@@ -1,0 +1,44 @@
+{
+  "python": {
+    "api_server.py": {
+      "missing_statements": 43,
+      "missing_branches": 17
+    },
+    "config.py": {
+      "missing_statements": 0,
+      "missing_branches": 0
+    },
+    "mqtt_client.py": {
+      "missing_statements": 8,
+      "missing_branches": 6
+    },
+    "prediction_service.py": {
+      "missing_statements": 16,
+      "missing_branches": 7
+    },
+    "research/evaluate.py": {
+      "missing_statements": 16,
+      "missing_branches": 10
+    }
+  },
+  "node": {
+    "cloudflare/collector.mjs": {
+      "missing_lines": 0,
+      "missing_branches": 4
+    },
+    "cloudflare/landmask.mjs": {
+      "missing_lines": 0,
+      "missing_branches": 3
+    },
+    "cloudflare/worker.mjs": {
+      "missing_lines": 0,
+      "missing_branches": 6
+    }
+  },
+  "browser": {
+    "static/index.html": {
+      "missing_statements": 105,
+      "missing_branches": 59
+    }
+  }
+}

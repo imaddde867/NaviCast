@@ -18,7 +18,11 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+      - run: npm run report:browser-coverage
+        if: always()
       - run: python scripts/check_test_report.py reports/browser.xml tests/inventory/browser.json
+        if: always()
+      - run: python scripts/check_coverage.py browser reports/browser-coverage.json
         if: always()
       - uses: actions/upload-artifact@v4
         if: always()
