@@ -36,6 +36,7 @@ function dashboard() {
         localStorage: { getItem: key => preferences.get(key) ?? null, setItem: (key, value) => preferences.set(key, value) },
         document: {
             addEventListener() {},
+            querySelector() { return null; },
             documentElement: { getAttribute: () => 'light' },
             createElement: () => ({ innerHTML: '', style: {} }),
             getElementById(id) {
