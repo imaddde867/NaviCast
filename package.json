@@ -3,14 +3,17 @@
   "private": true,
   "scripts": {
     "test": "node --test tests/*.test.cjs tests/*.test.mjs",
-    "check:bundle": "node scripts/check_bundle.mjs",
+    "test:browser": "playwright test",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "check:deploy": "wrangler deploy --dry-run",
     "test:runtime": "vitest run",
-    "test:ci": "node --test --test-reporter=spec --test-reporter=junit --test-reporter-destination=stdout --test-reporter-destination=reports/node.xml tests/*.test.cjs tests/*.test.mjs"
+    "test:ci": "node --test --test-reporter=spec --test-reporter=junit --test-reporter-destination=stdout --test-reporter-destination=reports/node.xml tests/*.test.cjs tests/*.test.mjs",
+    "check:bundle": "node scripts/check_bundle.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "leaflet": "1.9.4",
     "wrangler": "4.149.0",
     "@cloudflare/vitest-plugin": "1.4.2",
     "vitest": "5.0.4"
