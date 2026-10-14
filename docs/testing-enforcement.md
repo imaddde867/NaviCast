@@ -6,7 +6,8 @@ Wrangler/Docker/configuration. Separate duplicate workflows are removed.
 Testcase inventories reject passing subsets and unexpected skips; coverage
 tracks uncovered counts. Projection, browser and scientific mutations run in
 isolated temporary copies. Reports and browser failure traces/screenshots are
-uploaded even on failure. CI uses Python 3.11, Node 22, pinned dependencies,
+uploaded even on failure. Explicit Bash uses `-eo pipefail`, so piping build
+or Docker logs through `tee` cannot hide a failed check. CI uses Python 3.11, Node 22, pinned dependencies,
 read-only repository permissions, local services and no production secrets.
 `check:deploy` is Wrangler **dry-run only**. No deployment job is added.
 
