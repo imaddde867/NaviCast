@@ -44,7 +44,10 @@ compare the full field set to these references.
 ## Review and changes
 
 The golden values are **proposed for independent PR review**, not yet owner
-approved. Review arithmetic, scenario classifications and null semantics before
+approved. A separate review independently recalculated all 23 accepted vessels,
+selection/deduplication, motion/time/null fields and raster flags; all agreed,
+including Gotland 0.644. Owner approval remains a PR gate. Review arithmetic,
+scenario classifications and null semantics before
 merging. A requirement change must update this explanation and version the
 fixture/expected pair; never regenerate goldens by running the implementation.
 The existing 748-vessel snapshot remains useful for aggregate audit evidence,
