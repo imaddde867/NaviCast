@@ -74,9 +74,10 @@ limitations and evidence are in [projection references](../tests/golden/README.m
 rollout are in [testing-enforcement.md](testing-enforcement.md). A requirement-by-
 requirement status audit is in [testing-acceptance.md](testing-acceptance.md).
 
-Main protection and the required-check merge-blocking probe remain pending
-reviewed merges; source-ZIP regeneration remains conditional on that exact
-input. Synthetic scientific checks permit no forecasting accuracy claim.
+Main protection requires all five checks and PRs, including administrator
+enforcement. The deliberately failing #48 probe was blocked and closed
+without merging; see the enforcement evidence. Source-ZIP regeneration remains
+conditional on that exact input. Synthetic scientific checks permit no forecasting accuracy claim.
 
 ## Baseline audit
 

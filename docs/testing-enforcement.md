@@ -13,12 +13,11 @@ read-only repository permissions, local services and no production secrets.
 
 ## Dependency and review order
 
-The integration branch combines #39, #40, #41, #42, #44, #45 and #46 without
-merging them to main. This final PR targets that branch so its diff contains
-only consolidation and enforcement documentation/configuration. Review and
-merge the focused PRs, reconciling coverage after #42; then retarget this final
-PR to main and reconcile inventories/lockfile. The aggregate dependency branch
-is a verification aid, not an enormous replacement implementation PR.
+The integration branch combined #39, #40, #41, #42, #44, #45 and #46 for
+verification. On 2026-10-14, the reviewed focused PRs were merged individually
+with successful current-head CI; #45 was retargeted after #42, and final #47
+was reconciled/retargeted to main before its own green merge. The aggregate
+branch remained a verification aid, not an enormous replacement PR.
 
 ## Protection activation
 
@@ -31,8 +30,12 @@ the PR-author/owner as a collaborator, so an independent write-access reviewer
 requirement would make their own PRs unmergeable. The implementation PRs remain
 open for owner review; production deployment approval stays manual.
 Check providers are inferred from the established GitHub Actions checks.
+The verified live response binds all five to GitHub Actions app 15368. Send
+`checks` without legacy `contexts`: GitHub rejects the ambiguous combined
+request with 422. The committed checks-only payload was accepted and verified.
 
-After the final workflow is reviewed, merged and green on **main**, apply it:
+Protection was activated only after the final workflow was merged and green
+on **main**. To reproduce the reviewed owner-only application:
 
 ```bash
 gh run list --branch main --workflow ci.yml --limit 5
@@ -51,7 +54,8 @@ blocked by the required check; close the probe and delete its own branch.
 Do not attempt to merge the defect. The local mutation campaigns already prove
 assertion sensitivity; this additional probe proves repository enforcement.
 
-Protection and the merge-blocking probe are **pending**, not claimed complete.
+Protection and the merge-blocking probe are **verified complete**, as recorded
+below. The source checks-only payload matches the applied policy.
 No real-data forecasting quality evaluation has run; source-coastline
 regeneration is pending the original ZIP. Production deployment still requires
 manual owner approval through the existing deployment process.
@@ -68,3 +72,29 @@ Docker HTTP smoke and the 574,527-byte bundle passed inside CI.
 Whole-job durations: Python 42 s, Node 15 s, runtime 14 s, browser 80 s,
 build 30 s. These first measurements include setup/uploads and are not an
 established performance budget; timeouts bound jobs to 10/15 minutes.
+
+## Completed enforcement evidence (2026-10-14)
+
+All eight hardening PRs are merged. Main `61c1825` passed all five jobs in
+[run38617255513](https://github.com/imaddde867/NaviCast/actions/runs/38617255513):
+142 Python cases / 2.49 s,83 Node / 786.71 ms,12 workerd / 2.01 s,12 Chromium / 11.1 s;
+whole-job times35s/17s/16s/68s/45s respectively (including setup/uploads);
+complete inventories and coverage gates, zero skips/deselections, all ten
+software/scientific mutations detected, Docker HTTP smoke and bundle passed.
+An independent review agent recommended the original and reconciled final
+workflow before the authorized merges.
+
+Live REST verification confirmed strict/up-to-date branches, mandatory PRs,
+all five Actions-bound checks, administrator enforcement, resolved conversations,
+zero required review count as explicitly approved, and no bypass/force pushes/
+deletions. Main itself remained green.
+
+[Probe #48](https://github.com/imaddde867/NaviCast/pull/48) suppressed only the
+land-conflict flag. All83 Node cases executed; five actual golden/land-null
+assertions failed. The four other required jobs passed. GitHub reported
+`mergeStateStatus=BLOCKED` for a non-draft, conflict-free PR based on current main,
+without a missing-review gate. See [the failing run](https://github.com/imaddde867/NaviCast/actions/runs/38617982063)
+and [recorded result](https://github.com/imaddde867/NaviCast/pull/48#issuecomment-6175821684).
+The probe was closed without merging and its temporary remote branch deleted.
+No deliberate defect reached main, no production deployment occurred, and
+source-ZIP regeneration/locked real-data quality evaluation remain unverified.
