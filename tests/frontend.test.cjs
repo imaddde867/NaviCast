@@ -206,10 +206,10 @@ test('aging AIS fixes clear their map projections between API updates', () => {
 
 test('empty and stale feed states are visible to the user', () => {
     const app = dashboard();
-    app.run('document.getElementById("feed-status"); updateUIComponents(0)');
+    app.run('document.getElementById("feed-status"); updateUIComponents()');
     assert.match(app.elements.get('feed-status').textContent, /no vessels/i);
     app.context.batch = [vessel(1, { current_timestamp: '2020-01-01T00:00:00Z' })];
-    app.run('processVesselData(batch, 0); updateUIComponents(0)');
+    app.run('processVesselData(batch, 0); updateUIComponents()');
     assert.match(app.elements.get('feed-status').textContent, /stale/i);
 });
 
@@ -366,7 +366,7 @@ test('500 map markers do not disguise API fleet totals or projections', () => {
     app.context.batch = Array.from({ length: 600 }, (_, i) => vessel(i + 1, {
         predicted_latitude: 60, predicted_longitude: 22.1, prediction_for_timestamp: target
     }));
-    app.run('processVesselData(batch, 0); updateUIComponents(0)');
+    app.run('processVesselData(batch, 0); updateUIComponents()');
     assert.equal(app.run('vessels.size'), 500);
     assert.equal(app.elements.get('vessel-count').textContent, 600);
     assert.equal(app.elements.get('prediction-count').textContent, 600);
@@ -440,4 +440,19 @@ test('determinePrediction exposes only the projected position', () => {
     app.context.batch = [app.context.data];
     app.run('processVesselData(batch, 0)');
     assert.equal(app.run("'hasApiPrediction' in vessels.get(1)"), false);
+});
+
+test('prediction toggle respects fresh and stale server projections', () => {
+    const app = dashboard();
+    const target = new Date(Date.now() + 1800000).toISOString();
+    app.context.batch = [vessel(1, { predicted_latitude: 60, predicted_longitude: 22.1, prediction_for_timestamp: target }),
+        vessel(2, { predicted_latitude: 61, predicted_longitude: 22.1, prediction_for_timestamp: target,
+            current_timestamp: '2020-01-01T00:00:00Z' })];
+    app.run('processVesselData(batch, 0)');
+    assert.equal(app.run('vessels.get(1).hasPrediction'), true);
+    assert.equal(app.run('vessels.get(2).hasPrediction'), false);
+    app.run('handlePredictionToggle.call({ checked: false })');
+    assert.equal(app.run('map.hasLayer(vessels.get(1).predictionMarker)'), false);
+    app.run('handlePredictionToggle.call({ checked: true })');
+    assert.equal(app.run('map.hasLayer(vessels.get(1).predictionMarker)'), true);
 });

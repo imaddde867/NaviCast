@@ -969,7 +969,7 @@
         function handlePredictionToggle(e) {
             showPredictionLines = this.checked;
             vessels.forEach(vessel => {
-                const { predictedPos } = determinePrediction(vessel.data, vessel.lastPosition);
+                const { predictedPos } = determinePrediction(vessel.data);
                 updatePredictionVisuals(vessel, vessel.lastPosition, predictedPos);
             });
             applyVesselFilter();
@@ -1728,7 +1728,7 @@
             });
         }
 
-        function updateUIComponents(apiPredictionCount) {
+        function updateUIComponents() {
             // Central function to update various UI elements after data processing
             
             // 1. Update Header Stats
