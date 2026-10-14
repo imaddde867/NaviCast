@@ -23,9 +23,13 @@ is a verification aid, not an enormous replacement implementation PR.
 ## Protection activation
 
 `.github/main-protection.json` is a concrete GitHub REST protection payload:
-up-to-date branches, all five checks, one approving review, stale reviews
-dismissed, last-push approval, resolved conversations, administrator
-enforcement, no force pushes and no deletions. No bypass identities are added.
+up-to-date branches, all five checks, required pull requests, resolved
+conversations, administrator enforcement, no force pushes and no deletions.
+No bypass identities are added. Imad explicitly approved zero mandatory
+review approvals and no last-push-review gate on 2026-10-14: GitHub lists only
+the PR-author/owner as a collaborator, so an independent write-access reviewer
+requirement would make their own PRs unmergeable. The implementation PRs remain
+open for owner review; production deployment approval stays manual.
 Check providers are inferred from the established GitHub Actions checks.
 
 After the final workflow is reviewed, merged and green on **main**, apply it:
