@@ -29,6 +29,7 @@ jobs:
           node-version: '22'
       - run: pip install -r requirements-dev.txt -r research/requirements.txt
       - run: python -m pytest -q
+      - run: python scripts/check_research_mutations.py
       - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm run check:deploy
