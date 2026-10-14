@@ -20,7 +20,7 @@ jobs:
         if: always()
         with:
           python-version: '3.11'
-      - run: python scripts/check_test_report.py reports/runtime.xml
+      - run: python scripts/check_test_report.py reports/runtime.xml tests/inventory/runtime.json
         if: always()
       - uses: actions/upload-artifact@v4
         if: always()
