@@ -11,6 +11,8 @@ def test_demo_metadata_and_fleet():
     meta = client.get('/meta')
     assert meta.status_code == 200
     assert meta.json()['mode'] == 'demo'
+    assert meta.json()['observation_stale_after_seconds'] == 300
+    assert meta.json()['prediction_horizon_minutes'] == 30
     vessels = client.get('/vessels').json()
     assert len(vessels) == 4
     assert all(v['data_source'] == 'synthetic' for v in vessels)
@@ -109,6 +111,16 @@ def test_projection_from_an_older_fix_is_not_attached_to_new_position():
     row = sample_rows()[0]
     row['current_timestamp'] += timedelta(seconds=5)
     row['sog'] = 0
+    result = api_server._format_vessel_row(row)
+    assert result['predicted_latitude'] is None
+    assert result['prediction_method'] is None
+
+
+def test_projection_outside_baltic_bounds_is_hidden():
+    from demo_data import sample_rows
+    row = sample_rows()[0]
+    row['predicted_latitude'] = 80.0  # outside config.BOUNDS lat 50-70
+    row['predicted_longitude'] = 25.0
     result = api_server._format_vessel_row(row)
     assert result['predicted_latitude'] is None
     assert result['prediction_method'] is None
