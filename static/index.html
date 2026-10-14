@@ -1161,7 +1161,7 @@
 
         function updateProjectionStats() {
             // True API projection count across all valid API records, including off-map vessels.
-            const count = latestApiVessels.filter(data => determinePrediction(data) !== null).length;
+            const count = latestApiVessels.filter(data => determinePrediction(data).predictedPos !== null).length;
             document.getElementById('prediction-count').textContent = count;
             updatePredictionStatus(count);
         }
@@ -1498,13 +1498,13 @@
                 countdown = COUNTDOWN_SECONDS; // Reset refresh countdown
 
                 // Process the fetched data
-                const { processedVesselIds, apiPredictionCount } = processVesselData(vesselData, timeSinceLastUpdate);
+                const { processedVesselIds } = processVesselData(vesselData, timeSinceLastUpdate);
                 
                 // Remove vessels from the map that are no longer in the dataset
                 removeStaleVessels(processedVesselIds);
                 
                 // Update UI elements (stats, filter counts, status)
-                updateUIComponents(apiPredictionCount);
+                updateUIComponents();
                 
                 // Ensure loading animation completes
                 updateLoadingProgress(100);
