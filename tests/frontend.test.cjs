@@ -378,3 +378,28 @@ test('safety disclaimer persists in narrow viewport markup', () => {
     assert.doesNotMatch(html, /\.mode-note, \.current-time \{ display: none/);
     assert.doesNotMatch(script, /function calculatePredictionPosition/);
 });
+
+test('removing a server projection clears previously displayed trajectory', () => {
+    const app = dashboard();
+    const projected = vessel(1, { predicted_latitude: 60, predicted_longitude: 22.1,
+        prediction_for_timestamp: new Date(Date.now() + 1800000).toISOString() });
+    app.context.batch = [projected];
+    app.run('processVesselData(batch, 0)');
+    assert.equal(app.run('vessels.get(1).hasPrediction'), true);
+    app.context.batch = [vessel(1, { current_timestamp: new Date(Date.now() + 1000).toISOString() })];
+    app.run('processVesselData(batch, 0)');
+    assert.equal(app.run('vessels.get(1).hasPrediction'), false);
+    assert.equal(app.run('vessels.get(1).predictionLine'), null);
+    assert.equal(app.run('vessels.get(1).predictionMarker'), null);
+});
+
+test('coastline flag survives the frontend API-only projection path', () => {
+    const app = dashboard();
+    app.context.batch = [vessel(1, {
+        predicted_latitude: 60, predicted_longitude: 22.1,
+        prediction_for_timestamp: new Date(Date.now() + 1800000).toISOString(),
+        projection_land_conflict: true, projection_clear_until_fraction: 0.24
+    })];
+    app.run('processVesselData(batch, 0)');
+    assert.match(app.run('createPopupContent(batch[0]).innerHTML'), /Coast ahead/);
+});
