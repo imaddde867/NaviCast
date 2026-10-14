@@ -23,6 +23,7 @@ jobs:
     env:
       NAVICAST_TEST_DSN: host=127.0.0.1 port=5432 dbname=ais_project user=postgres password=local-test-only
       NAVICAST_REQUIRED_TESTS: '1'
+      COVERAGE_FILE: reports/.coverage
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,8 +32,10 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt -r research/requirements.txt
       - run: mkdir -p reports
-      - run: python -m pytest tests research -q -ra --durations=10 --junitxml=reports/python.xml
-      - run: python scripts/check_test_report.py reports/python.xml tests/inventory/python.json
+      - run: python -m coverage run --branch --source=api_server,config,mqtt_client,prediction_service,evaluate -m pytest tests research -q -ra --durations=10 --junitxml=reports/python.xml
+      - run: python -m coverage json -o reports/python-coverage.json && python -m coverage xml -o reports/python-coverage.xml && python -m coverage report
+        if: always()
+      - run: python scripts/check_test_report.py reports/python.xml tests/inventory/python.json && python scripts/check_coverage.py python reports/python-coverage.json
         if: always()
       - run: python scripts/check_research_mutations.py
       - uses: actions/upload-artifact@v4
@@ -52,14 +55,14 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: mkdir -p reports
-      - run: npm run test:ci
-      - run: node scripts/check_projection_mutations.mjs
+      - run: npm run test:coverage
       - uses: actions/setup-python@v5
         if: always()
         with:
           python-version: '3.11'
-      - run: python scripts/check_test_report.py reports/node.xml tests/inventory/node.json
+      - run: python scripts/check_test_report.py reports/node.xml tests/inventory/node.json && python scripts/check_coverage.py node reports/node.lcov
         if: always()
+      - run: node scripts/check_projection_mutations.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -90,3 +93,58 @@ jobs:
           name: infrastructure-check-logs
           path: reports/
           if-no-files-found: warn
+
+  worker-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:runtime
+      - uses: actions/setup-python@v5
+        if: always()
+        with:
+          python-version: '3.11'
+      - run: python scripts/check_test_report.py reports/runtime.xml tests/inventory/runtime.json
+        if: always()
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: worker-runtime-report
+          path: reports/
+          if-no-files-found: error
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: npm run report:browser-coverage
+        if: always()
+      - run: python scripts/check_test_report.py reports/browser.xml tests/inventory/browser.json
+        if: always()
+      - run: python scripts/check_coverage.py browser reports/browser-coverage.json
+        if: always()
+      - run: node scripts/check_browser_mutations.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-reports-and-failure-artifacts
+          path: reports/
+          if-no-files-found: error

@@ -1,7 +1,8 @@
 # Testing NaviCast
 
-Green CI proves only the contracts exercised below. It does not establish
-forecast accuracy, production Cloudflare operation, or correct browser rendering.
+Green CI proves only the contracts exercised below. Actual Chromium/Leaflet and
+workerd/D1 checks now verify dashboard rendering and runtime contracts. They do
+not establish forecast accuracy or production Cloudflare operation.
 CI uses Python 3.11, Node 22, PostgreSQL 16, pinned Python requirements and
 `npm ci --ignore-scripts`. It has read-only permissions, no production secrets,
 and no deployment step (`check:deploy` is a dry run).
@@ -22,19 +23,30 @@ docker exec navicast-test-postgres pg_isready -U postgres -d ais_project
 export NAVICAST_TEST_DSN='host=127.0.0.1 port=55432 dbname=ais_project user=postgres password=local-test-only'
 NAVICAST_REQUIRED_TESTS=1 python -m pytest tests research -q -ra \
   --durations=10 --junitxml=reports/python.xml
-python scripts/check_test_report.py reports/python.xml
+python scripts/check_test_report.py reports/python.xml tests/inventory/python.json
 npm run test:ci
-python scripts/check_test_report.py reports/node.xml
+python scripts/check_test_report.py reports/node.xml tests/inventory/node.json
+WRANGLER_SEND_METRICS=false npm run test:runtime
+python scripts/check_test_report.py reports/runtime.xml tests/inventory/runtime.json
+npx playwright install chromium
+npm run test:browser
+python scripts/check_test_report.py reports/browser.xml tests/inventory/browser.json
+node scripts/check_projection_mutations.mjs
+node scripts/check_browser_mutations.mjs
+python scripts/check_research_mutations.py
 WRANGLER_SEND_METRICS=false npm run check:deploy
+WRANGLER_SEND_METRICS=false npm run check:bundle
 bash -n start_navicast.sh
 docker compose config --quiet
 docker build -t navicast-check .
+bash scripts/check_docker.sh
 docker stop navicast-test-postgres
 ```
 
-Use only a disposable database. The current PostgreSQL tests create session-local
-temporary tables. Without a DSN, `python -m pytest -q -ra` intentionally skips
-three PostgreSQL tests for convenient offline work; this is forbidden in CI by
+Use only a disposable database. PostgreSQL tests apply the actual `schema.sql`
+to unique test schemas and drop only those schemas afterward. Without a DSN,
+`python -m pytest -q -ra` intentionally skips four PostgreSQL cases for
+convenient offline work; this is forbidden in CI by
 the JUnit report guard. Required CI runs also reject deselection (`-k`, `-m`,
 etc.). Reports list counts, skips, failures and test durations, and are uploaded
 even when a test command fails. Missing, malformed, empty, skipped or failing
@@ -46,6 +58,25 @@ Required suites also compare the exact testcase identities in
 cannot substitute for required scenarios. Inventories are reviewed suite
 bookkeeping, not projection oracles: additions may pass without raising a total
 count target; removing a required behavior needs an explicit inventory change.
+
+## Current validation layers
+
+The combined implementation runs 142 Python/PostgreSQL/research cases, 83 Node
+cases, 12 workerd/D1 cases and 12 actual Chromium/Leaflet cases. Required
+inventories are per-case contracts, not a target total. The five final CI jobs
+also run coverage gates and ten targeted software/scientific mutation probes.
+Commands above execute all suites and demo Docker startup; coverage reproduction
+is in [testing-quality.md](testing-quality.md). Suite-specific architecture,
+limitations and evidence are in [projection references](../tests/golden/README.md),
+[testing-browser.md](testing-browser.md), [testing-runtime.md](testing-runtime.md),
+[testing-infrastructure.md](testing-infrastructure.md), and
+[testing-scientific.md](testing-scientific.md). Final CI timing and protection
+rollout are in [testing-enforcement.md](testing-enforcement.md). A requirement-by-
+requirement status audit is in [testing-acceptance.md](testing-acceptance.md).
+
+Main protection and the required-check merge-blocking probe remain pending
+reviewed merges; source-ZIP regeneration remains conditional on that exact
+input. Synthetic scientific checks permit no forecasting accuracy claim.
 
 ## Baseline audit
 
@@ -64,6 +95,15 @@ it. Times are runner-reported elapsed times, not GitHub job budgets.
 | Shell syntax | Passed | Syntax check, no runtime exercise |
 | Compose configuration | Passed | Configuration check, no services started |
 | Docker build | Passed | BuildKit step times reported; total not recorded |
+
+Build/configuration timing rerun, 2026-10-14: a detached clean checkout of the
+same unchanged main `dca965c` used `npm ci --ignore-scripts`, then measured wall
+elapsed time with `time.perf_counter` around each complete command. Every check
+exited zero: Wrangler dry run **0.529808 s**, Bash syntax
+**0.000981 s**, Compose config **0.026530 s** and
+Docker build **0.498214 s**. Dependencies and Docker layers were
+cached; these are explicitly later reproducible baseline measurements, not a
+reconstruction of the original uncaptured build total or cold-install times.
 
 The initial sandbox Node invocation reported only three passing *files*, not
 individual tests. A rerun outside the sandbox verified 79 individual tests. The
@@ -95,7 +135,8 @@ before service imports. Node fixtures are constructed inline; Worker fetch and
 cache are restored after tests. `tests/fake_d1.mjs` recognizes the exact SQL
 strings used by the implementation and models only those operations. The
 748-vessel snapshot in `scripts/baseline/` is an audit input, **not an independent
-projection golden**. No versioned raw-AIS/golden pair exists yet.
+projection golden**. At the baseline no versioned raw-AIS/golden pair existed;
+the independently calculated pair added afterward is described above.
 
 ## Tests that can preserve incorrect assumptions
 
@@ -117,9 +158,12 @@ projection golden**. No versioned raw-AIS/golden pair exists yet.
 Keep these useful regression tests; add independent validation at the boundary
 rather than replacing them with more mocks.
 
-## Unexercised critical paths and follow-ups
+## Critical paths missing at the baseline
 
-The following remain open requirements, not claims made by the current CI:
+These were baseline gaps, not the current state. The focused suite documents
+linked above record their implemented software checks and remaining evidence
+limits. Source-dependent regeneration, production operation, main enforcement
+and locked real-data evaluation remain unverified:
 
 1. Independently calculated, versioned golden output through the raw AIS HTTP
    pipeline, covering every projection and coastline null field; deliberate
@@ -132,9 +176,11 @@ The following remain open requirements, not claims made by the current CI:
 4. Real PostgreSQL `schema.sql` compatibility and Docker demo startup/HTTP smoke.
    Avoid substantial investment in the legacy stack scheduled for removal (#26).
 5. Land-mask checksum/header/bounds and source-available deterministic build;
-   measured bundle budget. Current dry run has no explicit size gate.
+   measured bundle budget. The baseline dry run had no explicit size gate; the implemented budget is
+   614400 gzip bytes.
 6. Coverage for production modules, measured regression policy and targeted
-   mutation evidence. Current CI does not measure coverage or mutation survival.
+   mutation evidence. The baseline CI did not measure coverage or mutation survival; final CI
+   measures coverage and targeted mutation detection.
 7. Research split independence, purge gaps, tolerance edges, metre reference
    distances, counted abstentions and vessel-dependent confidence intervals
    under #16–#18. Actual accuracy evaluation needs locked independent archived
@@ -149,7 +195,8 @@ browser E2E; Workers/D1; enforcement/infrastructure; coverage/mutations. Researc
 is a separate workstream. PR #38 is merged; its branch remains untouched.
 
 The baseline PR establishes `python-tests`, `node-tests`, and `build-checks`.
-Add `worker-runtime` and `browser-e2e` only when those suites exist and pass.
+The final workflow also includes passing `worker-runtime` and `browser-e2e`
+jobs, consolidating the temporarily separate focused workflows.
 Configure required checks/PR review on main **after** all final job names are
 established and stable; requiring nonexistent checks can block all merging.
 Do not merge an implementation PR before CI passes, and keep production

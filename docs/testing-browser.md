@@ -32,6 +32,6 @@ fallback. The script requires a passing unmodified temporary copy and executed
 browser assertion failures for each mutation. Working sources are untouched.
 
 CI retains JUnit/HTML reports and failure screenshots/traces. It rejects skipped,
-empty or unsuccessful required reports. `browser.yml` is temporarily separate
-until the focused CI/suite PRs merge, then its `browser-e2e` job can be consolidated.
+empty or unsuccessful required reports. The focused #42 branch used separate `browser.yml`; the combined #47
+workflow consolidates `browser-e2e` into `ci.yml`.
 No production service, browser login or deployment is involved.

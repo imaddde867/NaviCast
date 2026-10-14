@@ -80,3 +80,14 @@ and explainable:
 
 Scientific split/leakage/matching/bootstrap validation belongs to #16–#18.
 No coverage result or synthetic test permits a forecasting accuracy claim.
+
+## Combined verification (2026-10-14)
+
+The dependency integration checkout runs 142 Python/PostgreSQL cases in 1.39 s,
+83 Node cases in 227.92 ms, 12 workerd/D1 cases in 1.78 s and 12 Chromium
+cases in 5.7 s. All required inventories match, with zero skipped or deselected
+cases. These are local Python 3.12.3 and Node 22 measurements. Coverage gates
+pass; independent scientific tests improve evaluate.py to 16 uncovered
+statements and 10 branches, and that tighter baseline is recorded.
+The required inventories enumerate behavior by testcase identity; a passing
+subset is rejected independently of coverage percentages.
