@@ -78,7 +78,7 @@ function normalize(features, fetchedAt) {
       if (Math.abs(deltaLat) <= 0.5 && Math.abs(deltaLon) <= 0.5 && inRegion(lat + deltaLat, lon + deltaLon)) {
         const { conflict, clear } = scanPath(lat, lon, lat + deltaLat, lon + deltaLon);
         Object.assign(vessel, {
-          projection_land_conflict: conflict,
+          projection_land_conflict: false,
           projection_clear_until_fraction: clear === null ? null : Math.round(clear * 1000) / 1000,
           prediction_method: 'dead_reckoning',
           predicted_latitude: lat + deltaLat,
