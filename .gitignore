@@ -89,6 +89,7 @@ bucket_policy.json
 .playwright-cli/
 output/
 .pytest_cache/
+reports/
 .superpowers/
 .gitnexus
 node_modules/
