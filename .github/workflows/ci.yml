@@ -3,8 +3,9 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
-  test:
+  python-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:16
@@ -18,19 +19,60 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       NAVICAST_TEST_DSN: host=127.0.0.1 port=5432 dbname=ais_project user=postgres password=local-test-only
+      NAVICAST_REQUIRED_TESTS: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: pip
+      - run: pip install -r requirements-dev.txt -r research/requirements.txt
+      - run: mkdir -p reports
+      - run: python -m pytest tests research -q -ra --durations=10 --junitxml=reports/python.xml
+      - run: python scripts/check_test_report.py reports/python.xml tests/inventory/python.json
+        if: always()
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-test-report
+          path: reports/
+          if-no-files-found: error
+  node-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: pip install -r requirements-dev.txt -r research/requirements.txt
-      - run: python -m pytest -q
+          cache: npm
       - run: npm ci --ignore-scripts
-      - run: npm test
+      - run: mkdir -p reports
+      - run: npm run test:ci
+      - uses: actions/setup-python@v5
+        if: always()
+        with:
+          python-version: '3.11'
+      - run: python scripts/check_test_report.py reports/node.xml tests/inventory/node.json
+        if: always()
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: node-test-report
+          path: reports/
+          if-no-files-found: error
+  build-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
       - run: npm run check:deploy
       - run: bash -n start_navicast.sh
       - run: docker compose config --quiet
