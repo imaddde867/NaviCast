@@ -89,7 +89,7 @@ Source: [Fintraffic / digitraffic.fi](https://www.digitraffic.fi/en/marine-traff
 
 Map tiles credit OpenStreetMap contributors. The OSM-derived land mask `cloudflare/land_mask.json` is licensed ODbL 1.0, separately from this repository's MIT code licence; see `cloudflare/LAND_MASK_NOTICE.md`, and the map footer credits OpenStreetMap and the ODbL. No IEEE DataPort or DMA dataset is committed; their licence/access checks remain open in [#15](https://github.com/imaddde867/NaviCast/issues/15).
 
-Optional database integration checks use `NAVICAST_TEST_DSN` pointing to a disposable PostgreSQL instance; they create session-local temporary tables. CI runs these checks with PostgreSQL 16.
+Database integration checks use `NAVICAST_TEST_DSN` pointing to a disposable PostgreSQL instance and apply the real `schema.sql` in isolated test schemas. CI requires them with PostgreSQL 16; skipped required cases fail the report guard. See [the complete testing guide](docs/testing.md) for unit, workerd/D1, browser, coverage, mutation and Docker checks, and [the acceptance audit](docs/testing-acceptance.md) for verified scope and remaining evidence limits.
 
 The runtime is pinned in `requirements.lock`. Regenerate it with `uv pip compile requirements.txt --universal --python-version 3.11 -o requirements.lock` after reviewing dependency updates.
 
