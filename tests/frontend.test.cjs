@@ -54,6 +54,7 @@ function dashboard() {
     // Keep the real application functions; only the external Leaflet setup is omitted.
     vm.runInContext(script.slice(0, script.indexOf('// --- Map Initialization ---')) +
         script.slice(script.indexOf('// --- Event Listeners ---')), context);
+    vm.runInContext('observationStaleAfterMs = 300000; predictionHorizonMinutes = 30;', context);
     return { context, layers, elements, preferences, fittedViews, run: code => vm.runInContext(code, context) };
 }
 
@@ -129,6 +130,7 @@ test('missing or invalid /meta never enables a guessed stale threshold or horizo
         { mode: 'live', observation_stale_after_seconds: '300', prediction_horizon_minutes: 30 }
     ]) {
         const app = dashboard();
+        app.run('observationStaleAfterMs = null; predictionHorizonMinutes = null');
         app.context.AbortController = AbortController;
         app.context.fetch = async () => ({ ok: true, json: async () => metadata });
         assert.equal(await app.run('fetchMetadata()'), false);
