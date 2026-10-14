@@ -20,9 +20,8 @@ Vitest's host filesystem transform cache is disabled because workerd cannot
 read those paths. The initial default-cache run failed before collecting any
 tests; disabling it allowed 11 initial cases to run in 1.69 seconds. The final
 suite adds a real write-rejection regression. JUnit results are uploaded and
-checked for empty/skipped/failing execution. `runtime.yml` is separate while
-the baseline CI refactor (#39) is reviewed; consolidate into `ci.yml` once the
-focused suite PRs merge. The guard script is identical to #39's.
+checked for empty/skipped/failing execution. The focused #40 branch used separate `runtime.yml`; the combined #47
+workflow consolidates `worker-runtime` into `ci.yml`. The guard script is identical to #39's.
 
 Clean-install final local result: **12 passed, zero skips, 1.78 s**; existing
 Node suites: **79 passed, zero skips, 191.21 ms**, Node 22.23.1. No production
