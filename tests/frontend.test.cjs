@@ -7,7 +7,7 @@ const test = require('node:test');
 const html = fs.readFileSync(path.join(__dirname, '../static/index.html'), 'utf8');
 const script = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
 
-function dashboard() {
+function dashboard({ configured = true } = {}) {
     const layers = new Set();
     const elements = new Map();
     const preferences = new Map();
@@ -17,11 +17,12 @@ function dashboard() {
         removeLayer: layer => layers.delete(layer),
         fitBounds: (bounds, options) => fittedViews.push({ bounds, options })
     };
-    function layer(position) {
+    function layer(position, options = {}) {
         return {
+            options,
             addTo() { layers.add(this); return this; },
-            bindPopup() { return this; }, bindTooltip() { return this; },
-            getElement() { return null; }, setStyle() { return this; },
+            bindPopup() { return this; }, bindTooltip(text) { this.tooltip = text; return this; },
+            getElement() { return null; }, setStyle(style) { Object.assign(options, style); return this; },
             off() { return this; }, on() { return this; },
             getLatLng() { return { lat: position[0], lng: position[1] }; },
             setLatLng(value) { position = value; }, isPopupOpen() { return false; }
@@ -54,6 +55,7 @@ function dashboard() {
     // Keep the real application functions; only the external Leaflet setup is omitted.
     vm.runInContext(script.slice(0, script.indexOf('// --- Map Initialization ---')) +
         script.slice(script.indexOf('// --- Event Listeners ---')), context);
+    if (configured) vm.runInContext("observationStaleAfterMs = 300000; predictionHorizonMinutes = 30", context);
     return { context, layers, elements, preferences, fittedViews, run: code => vm.runInContext(code, context) };
 }
 
@@ -89,14 +91,20 @@ test('invalid and duplicate records cannot consume valid fleet capacity', () => 
     assert.equal(app.run('vessels.has(501)'), true);
 });
 
-test('browser projection time is thirty minutes after the AIS fix', () => {
+function projection(overrides = {}) {
+    return { predicted_latitude: 60, predicted_longitude: 22.1,
+        prediction_for_timestamp: new Date(Date.now() + 1800000).toISOString(),
+        prediction_method: 'dead_reckoning', ...overrides };
+}
+
+test('popup projection time is the exact server target timestamp', () => {
     const app = dashboard();
-    app.context.data = vessel(1, { current_timestamp: '2026-10-13T09:00:00Z' });
-    const result = app.run("formatPredictionInfo(data, false, new Date('2026-10-13T09:10:00Z'))");
-    assert.equal(result.time, new Date('2026-10-13T09:30:00Z').toLocaleString('en-US', {
+    app.context.data = vessel(1, projection({ prediction_for_timestamp: '2026-10-14T09:47:00Z' }));
+    const result = app.run("formatPredictionInfo(data, new Date('2026-10-14T09:10:00Z'))");
+    assert.equal(result.time, new Date('2026-10-14T09:47:00Z').toLocaleString('en-US', {
         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
     }));
-    assert.match(result.source, /constant.course/i);
+    assert.match(result.source, /server/i);
 });
 
 test('stale or invalid AIS timestamps do not produce a forecast', () => {
@@ -109,39 +117,45 @@ test('stale or invalid AIS timestamps do not produce a forecast', () => {
     }
 });
 
-test('metadata adjusts hosted REST observation staleness without changing the local default', async () => {
+test('metadata supplies the observation staleness and projection horizon', async () => {
     const app = dashboard();
     app.context.AbortController = AbortController;
     app.context.fetch = async () => ({ ok: true, json: async () => ({
-        mode: 'live', observation_stale_after_seconds: 300
+        mode: 'live', observation_stale_after_seconds: 300, prediction_horizon_minutes: 45
     }) });
     await app.run('fetchMetadata()');
     assert.equal(app.run('isVesselStale(new Date(Date.now() - 180000).toISOString())'), false);
     assert.equal(app.run('isVesselStale(new Date(Date.now() - 360000).toISOString())'), true);
+    assert.equal(app.run('predictionHorizonMinutes'), 45);
+    assert.match(app.elements.get('mode-banner').textContent, /45 minutes/);
 });
 
-test('missing or invalid metadata keeps the default 60-second staleness threshold', async () => {
+test('missing or invalid metadata hides projections without a browser default', async () => {
     for (const metadata of [
         { mode: 'live' },
         { mode: 'live', observation_stale_after_seconds: 0 },
-        { mode: 'live', observation_stale_after_seconds: 1801 },
+        { mode: 'live', observation_stale_after_seconds: 300, prediction_horizon_minutes: 0 },
         { mode: 'live', observation_stale_after_seconds: '300' }
     ]) {
         const app = dashboard();
         app.context.AbortController = AbortController;
         app.context.fetch = async () => ({ ok: true, json: async () => metadata });
         await app.run('fetchMetadata()');
-        assert.equal(app.run('isVesselStale(new Date(Date.now() - 90000).toISOString())'), true);
+        assert.equal(app.run('observationStaleAfterMs'), null);
+        assert.equal(app.run('predictionHorizonMinutes'), null);
+        app.context.data = vessel(1, projection());
+        assert.equal(app.run('determinePrediction(data).predictedPos'), null);
+        assert.match(app.elements.get('mode-banner').textContent, /configuration unavailable/i);
     }
 });
 
-test('expired API forecast is replaced with a projection from a fresh fix', () => {
+test('expired API forecast is hidden without a substitute', () => {
     const app = dashboard();
     app.context.data = vessel(1, { predicted_latitude: 60, predicted_longitude: 22.1,
         prediction_for_timestamp: '2020-01-01T00:00:00Z', prediction_method: 'dead_reckoning' });
     const result = app.run('determinePrediction(data, [60, 22])');
     assert.equal(result.isApiPrediction, false);
-    assert.notEqual(result.predictedPos, null);
+    assert.equal(result.predictedPos, null);
 });
 
 test('vessel identity, country and type are escaped in popup HTML', () => {
@@ -164,9 +178,9 @@ test('popup suppresses stale forecast details as well as the map forecast', () =
     assert.equal(app.run('createPopupContent(data).innerHTML').includes('popup-prediction'), false);
 });
 
-test('projection filter includes browser projections and respects display toggles', () => {
+test('projection filter includes server projections and respects display toggles', () => {
     const app = dashboard();
-    app.context.batch = [vessel(1)];
+    app.context.batch = [vessel(1, projection())];
     app.run('processVesselData(batch, 0); activeFilter = "predictable"; applyVesselFilter()');
     assert.equal(app.run('map.hasLayer(vessels.get(1).marker)'), true);
     app.run('handlePredictionToggle.call({ checked: false })');
@@ -177,7 +191,7 @@ test('projection filter includes browser projections and respects display toggle
 
 test('aging AIS fixes clear their map projections between API updates', () => {
     const app = dashboard();
-    app.context.batch = [vessel(1)];
+    app.context.batch = [vessel(1, projection())];
     app.run('processVesselData(batch, 0)');
     assert.equal(app.run('map.hasLayer(vessels.get(1).predictionMarker)'), true);
     app.run('vessels.get(1).data.current_timestamp = "2020-01-01T00:00:00Z"; updateTimeDisplays()');
@@ -198,7 +212,7 @@ test('metadata identifies synthetic demo data without inferring mode from vessel
     const app = dashboard();
     app.context.AbortController = AbortController;
     app.context.fetch = async () => ({ ok: true, json: async () => ({
-        mode: 'demo', prediction_method: 'dead_reckoning', prediction_horizon_minutes: 30
+        mode: 'demo', prediction_method: 'dead_reckoning', prediction_horizon_minutes: 30, observation_stale_after_seconds: 60
     }) });
     await app.run('fetchMetadata()');
     assert.match(app.elements.get('mode-banner').textContent, /demo/i);
@@ -235,7 +249,7 @@ test('basemap credits OpenStreetMap and Digitraffic data and its licence', () =>
 test('first demo fleet is framed once without resetting the view on later polls', async () => {
     const app = dashboard();
     app.context.AbortController = AbortController;
-    app.context.fetch = async () => ({ ok: true, json: async () => ({ mode: 'demo' }) });
+    app.context.fetch = async () => ({ ok: true, json: async () => ({ mode: 'demo', prediction_horizon_minutes: 30, observation_stale_after_seconds: 60 }) });
     await app.run('fetchMetadata()');
     app.context.batch = [vessel(1, { current_latitude: 55, current_longitude: 15 }),
         vessel(2, { current_latitude: 66, current_longitude: 26 })];
@@ -250,7 +264,7 @@ test('demo framing works when metadata arrives after the vessel response', async
     app.context.batch = [vessel(1)];
     app.run('processVesselData(batch, 0)');
     app.context.AbortController = AbortController;
-    app.context.fetch = async () => ({ ok: true, json: async () => ({ mode: 'demo' }) });
+    app.context.fetch = async () => ({ ok: true, json: async () => ({ mode: 'demo', prediction_horizon_minutes: 30, observation_stale_after_seconds: 60 }) });
     await app.run('fetchMetadata()');
     assert.equal(app.fittedViews.length, 1);
     app.run('updateFeedStatus()');
@@ -279,17 +293,18 @@ test('movement validation uses time between AIS observations rather than API pol
     assert.equal(app.run('vessels.get(1).timestamp'), app.context.next[0].current_timestamp);
 });
 
-test('rejected movement preserves the accepted fix, popup and projection', () => {
+test('rejected movement preserves the accepted fix and clears a missing server projection', () => {
     const app = dashboard();
     const now = Date.now();
-    app.context.first = [vessel(1, { current_timestamp: new Date(now - 5000).toISOString() })];
+    app.context.first = [vessel(1, { current_timestamp: new Date(now - 5000).toISOString(), ...projection() })];
     app.context.rejected = [vessel(1, { current_timestamp: new Date(now).toISOString(),
         current_latitude: 65, current_longitude: 26, sog: 20 })];
     app.run('processVesselData(first, 10); previousProjection = vessels.get(1).predictionMarker; processVesselData(rejected, 10)');
     assert.equal(app.run('vessels.get(1).timestamp'), app.context.first[0].current_timestamp);
     assert.equal(app.run('vessels.get(1).data.current_latitude'), 60);
     assert.equal(app.run('vessels.get(1).marker.getLatLng().lat'), 60);
-    assert.equal(app.run('vessels.get(1).predictionMarker === previousProjection'), true);
+    assert.notEqual(app.run('previousProjection'), null);
+    assert.equal(app.run('vessels.get(1).predictionMarker'), null);
     assert.match(app.run('createPopupContent(vessels.get(1).data).innerHTML'), /60\.000000, 22\.000000/);
 });
 
@@ -338,4 +353,98 @@ test('unknown motion is excluded from stationary count and filter on create and 
     assert.equal(app.run('vessels.get(2).speed'), null);
     assert.equal(app.elements.get('filter-stationary').textContent, 'Stationary (0)');
     assert.equal(app.run('map.hasLayer(vessels.get(2).marker)'), false);
+});
+
+test('missing, partial and rejected API projections never create substitute trajectories', () => {
+    const app = dashboard();
+    for (const fields of [
+        {}, { predicted_latitude: 60 }, { predicted_longitude: 22.1 },
+        projection({ predicted_latitude: 91 }), projection({ predicted_longitude: NaN }),
+        projection({ prediction_for_timestamp: null }),
+        projection({ prediction_for_timestamp: 'not-a-date' }),
+        projection({ prediction_for_timestamp: new Date(Date.now() - 1000).toISOString() })
+    ]) {
+        app.context.batch = [vessel(1, projection())];
+        app.run('processVesselData(batch, 0)');
+        assert.notEqual(app.run('vessels.get(1).predictionLine'), null);
+        app.context.batch = [vessel(1, fields)];
+        app.run('processVesselData(batch, 0); updateUIComponents(); handlePredictionToggle.call({ checked: true })');
+        assert.equal(app.run('vessels.get(1).predictionLine'), null);
+        assert.equal(app.run('vessels.get(1).predictionMarker'), null);
+        assert.equal(app.layers.size, 1);
+        assert.equal(app.run('createPopupContent(batch[0]).innerHTML').includes('popup-prediction'), false);
+        assert.equal(app.elements.get('prediction-count').textContent, 0);
+    }
+});
+
+test('server coordinates and land-conflict styling survive without browser projection guards', () => {
+    const app = dashboard();
+    app.context.batch = [vessel(1, projection({ predicted_latitude: 60.4, predicted_longitude: 23,
+        projection_land_conflict: true, projection_clear_until_fraction: 0.25 }))];
+    app.run('processVesselData(batch, 0)');
+    assert.equal(app.run('vessels.get(1).predictionMarker.getLatLng().lng'), 23);
+    assert.equal(app.run('vessels.get(1).predictionLine.options.dashArray'), '2,8');
+    assert.equal(app.run('vessels.get(1).predictionMarker.options.fillOpacity'), 0);
+    assert.equal(app.run('vessels.get(1).data.projection_clear_until_fraction'), 0.25);
+    assert.match(app.run('createPopupContent(batch[0]).innerHTML'), /Coast ahead/);
+});
+
+test('capped fleet counts include unrendered API vessels and the notice follows filters', () => {
+    const app = dashboard();
+    app.context.batch = Array.from({ length: 600 }, (_, i) => vessel(i + 1,
+        i >= 500 ? projection({ sog: 0 }) : {}));
+    app.run('processVesselData(batch, 0); updateUIComponents()');
+    assert.equal(app.run('vessels.size'), 500);
+    assert.equal(app.elements.get('vessel-count').textContent, 600);
+    assert.equal(app.elements.get('prediction-count').textContent, 100);
+    assert.equal(app.elements.get('filter-all').textContent, 'All Vessels (600)');
+    assert.equal(app.elements.get('filter-moving').textContent, 'Moving (500)');
+    assert.equal(app.elements.get('filter-stationary').textContent, 'Stationary (100)');
+    assert.equal(app.elements.get('filter-predictable').textContent, 'Projected (100)');
+    assert.match(app.elements.get('render-status').textContent, /500 rendered of 600.*500-vessel rendering limit/);
+    app.run('activeFilter = "predictable"; applyVesselFilter(); updateFeedStatus()');
+    assert.match(app.elements.get('feed-status').textContent, /0 vessels visible.*500 rendered of 600/);
+    app.context.batch = [vessel(1)];
+    app.run('processVesselData(batch, 0); updateUIComponents()');
+    assert.equal(app.elements.get('vessel-count').textContent, 1);
+    assert.equal(app.elements.get('render-status').textContent, '');
+    app.context.batch = [];
+    app.run('processVesselData(batch, 0); updateUIComponents()');
+    assert.equal(app.elements.get('vessel-count').textContent, 0);
+    assert.equal(app.elements.get('prediction-count').textContent, 0);
+});
+
+test('metadata arriving after vessels enables only server projections, then expiry removes them', async () => {
+    const app = dashboard({ configured: false });
+    app.context.batch = [vessel(1, projection()), vessel(2)];
+    app.run('processVesselData(batch, 0)');
+    assert.equal(app.run('vessels.get(1).predictionMarker'), null);
+    app.context.AbortController = AbortController;
+    app.context.fetch = async () => ({ ok: true, json: async () => ({
+        mode: 'live', observation_stale_after_seconds: 300, prediction_horizon_minutes: 45
+    }) });
+    await app.run('fetchMetadata()');
+    assert.match(app.run('vessels.get(1).predictionMarker.tooltip'), /45 min from source fix/);
+    assert.equal(app.run('vessels.get(2).predictionMarker'), null);
+    app.run('vessels.get(1).data.prediction_for_timestamp = "2020-01-01T00:00:00Z"; updateTimeDisplays()');
+    assert.equal(app.run('vessels.get(1).predictionMarker'), null);
+    assert.equal(app.elements.get('prediction-count').textContent, 0);
+});
+
+test('metadata fetch failure hides existing projections and reports configuration unavailable', async () => {
+    const app = dashboard();
+    app.context.batch = [vessel(1, projection())];
+    app.run('processVesselData(batch, 0)');
+    app.context.AbortController = AbortController;
+    app.context.fetch = async () => { throw new Error('offline'); };
+    await app.run('fetchMetadata()');
+    assert.equal(app.run('vessels.get(1).predictionMarker'), null);
+    assert.match(app.elements.get('mode-banner').textContent, /configuration unavailable/i);
+    assert.match(app.elements.get('feed-status').textContent, /configuration unavailable/i);
+});
+
+test('navigation disclaimer is on the map page and remains present on mobile', () => {
+    assert.match(html, /class="mode-note">For exploration · not for navigation/);
+    assert.doesNotMatch(html, /\.mode-note[^{}]*\{[^}]*display:\s*none/);
+    assert.doesNotMatch(script, /calculatePredictionPosition|PREDICTION_HOURS_AHEAD|MAX_PREDICTION_DISTANCE_NM|radiansToDegrees/);
 });

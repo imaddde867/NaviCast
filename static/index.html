@@ -686,17 +686,23 @@
         .leaflet-popup-content { line-height: 1.5; }
         .popup-prediction { font-size: 0.85rem; }
         @media (max-width: 1000px) {
-            .mode-note, .current-time { display: none; }
+            :root { --banner-height: 104px; }
+            .mode-strip { flex-wrap: wrap; gap: 4px 12px; }
+            .mode-strip > div { flex-basis: 100%; }
+            #render-status { flex: 1; }
+            .current-time { display: none; }
+            .mode-note { white-space: normal; }
             .time-footer { gap: 12px; }
         }
         @media (max-width: 640px) {
-            :root { --banner-height: 72px; }
+            :root { --banner-height: 144px; }
             .header { padding: 0 12px; }
             .logo { width: 128px; height: 25px; }
             .title { font-size: 1.1rem; }
             .subtitle { font-size: 0.65rem; }
             .stats { font-size: 0.7rem; gap: 4px; }
             .mode-strip { padding: 8px 12px; font-size: 0.73rem; }
+            #render-status { flex-basis: 100%; }
             .control-panel { top: auto; bottom: 68px; right: 12px; width: 300px;
                 max-height: calc(100dvh - 240px); }
             .control-panel.collapsed { top: calc(80px + var(--banner-height)); bottom: auto; }
@@ -724,17 +730,18 @@
         <div class="stats">
             <div class="stat-item">
                 <i class="fas fa-ship"></i>
-                <span>Vessels: <span id="vessel-count">0</span></span>
+                <span>API vessels: <span id="vessel-count">0</span></span>
             </div>
             <div class="stat-item">
                 <i class="fas fa-route"></i>
-                <span>Projections: <span id="prediction-count">0</span></span>
+                <span>API projections: <span id="prediction-count">0</span></span>
             </div>
         </div>
     </header>
 
     <div class="mode-strip">
         <div><span id="mode-banner" role="status">Checking feed mode…</span><span id="fetch-error" role="status" style="display: none;"></span></div>
+        <span id="render-status" role="status" aria-live="polite"></span>
         <span class="mode-note">For exploration · not for navigation</span>
     </div>
     <main id="map" aria-label="Baltic vessel positions and constant-course projections"></main>
@@ -867,18 +874,14 @@
         const UPDATE_INTERVAL_MS = 10000; // 10 seconds
         const COUNTDOWN_SECONDS = 10;
         const FETCH_TIMEOUT_MS = 8000; // Abort /vessels fetch after this long
-        let observationStaleAfterMs = 60000; // AIS timestamp older than this counts as stale
+        let observationStaleAfterMs = null; // Supplied by /meta; unknown means projections stay hidden
+        let predictionHorizonMinutes = null;
         const FETCH_BACKOFF_BASE_MS = 10000; // First retry delay after a fetch failure
         const FETCH_BACKOFF_MAX_MS = 120000; // Cap for exponential backoff
         let fetchFailureCount = 0; // Consecutive fetch failures (drives backoff)
         let nextFetchAllowedAt = 0; // Timestamp before which polling is skipped (backoff)
         const MIN_SPEED_MOVING_KNOTS = 0.5;
-        const PREDICTION_HOURS_AHEAD = 0.5; // 30 minutes
-        const MAX_PREDICTION_DISTANCE_NM = 15; // Max distance for valid 30-min prediction
         const MAX_VALID_SPEED_KNOTS = 50; // Max speed for movement validation
-        const BALTIC_SEA_BOUNDS = {
-            minLat: 50, maxLat: 70, minLon: 10, maxLon: 30
-        }; // Mirrors config.py BOUNDS (source of truth); kept in sync manually.
         const FINLAND_CENTER = [60.5, 22.5];
         const FINLAND_ZOOM = 7;
         const MAX_RENDERED_VESSELS = 500; // shortcut: bounded fleet view, paginate if more than 500 vessels must be explored
@@ -892,6 +895,7 @@
         let feedMode = null;
         let demoFleetFramed = false;
         let availableVesselCount = 0;
+        let fleetData = []; // Full API snapshot, independent of the marker cap
         let vesselListCapped = false; // True when the render cap trimmed this batch
         let loadingProgressInterval = null; // For loading animation
         
@@ -929,13 +933,13 @@
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', initializeApp);
 
-        function initializeApp() {
+        async function initializeApp() {
             initPanelState();
             initThemeState();
             startTimers();
             setupEventListeners();
             startLoadingAnimation(); // Show initial loading
-            fetchMetadata();
+            await fetchMetadata();
             fetchAndDisplayVessels(); // Initial data load
         }
 
@@ -1034,7 +1038,7 @@
             const now = new Date();
             let projectionsExpired = false;
             vessels.forEach(vessel => {
-                if (vessel.hasPrediction && isVesselStale(vessel.data.current_timestamp)) {
+                if (vessel.hasPrediction && !determinePrediction(vessel.data).predictedPos) {
                     vessel.hasPrediction = false;
                     vessel.hasApiPrediction = false;
                     updatePredictionVisuals(vessel, vessel.lastPosition, null);
@@ -1045,10 +1049,8 @@
             if (projectionsExpired) {
                 updateFilterCounts();
                 applyVesselFilter();
-                const count = Array.from(vessels.values()).filter(v => v.hasPrediction).length;
-                document.getElementById('prediction-count').textContent = count;
-                updatePredictionStatus(count);
             }
+            updateFleetCounts();
             if (lastUpdateTimestamp) updateFeedStatus();
             const currentTimeEl = document.getElementById('current-time');
             if (currentTimeEl) currentTimeEl.textContent = now.toLocaleTimeString();
@@ -1126,18 +1128,25 @@
             const statusText = document.getElementById('prediction-status-text');
             if (!statusIndicator || !statusText) return;
             statusIndicator.className = `status-indicator ${projectionCount > 0 ? 'status-active' : 'status-inactive'}`;
-            statusText.textContent = projectionCount > 0 ? 'Ready' : 'No fresh fixes';
+            statusText.textContent = projectionCount > 0 ? 'Ready' : (observationStaleAfterMs === null ? 'Configuration unavailable' : 'No valid server projections');
         }
 
         function updateFeedStatus() {
             const status = document.getElementById('feed-status');
             if (!status) return;
-            const staleCount = Array.from(vessels.values()).filter(v => isVesselStale(v.data.current_timestamp)).length;
+            const renderStatus = document.getElementById('render-status');
+            renderStatus.textContent = availableVesselCount > vessels.size
+                ? `${vessels.size} rendered of ${availableVesselCount} API records${vesselListCapped ? ` · ${MAX_RENDERED_VESSELS}-vessel rendering limit` : ' · Some records cannot be drawn'}.`
+                : '';
+            const staleCount = fleetData.filter(v => isVesselStale(v.current_timestamp)).length;
             const visibleCount = Array.from(vessels.values()).filter(v => map.hasLayer(v.marker)).length;
-            status.textContent = vessels.size === 0 ? 'No vessels in this feed. Waiting for the next update.' :
-                `${visibleCount} vessels visible${vesselListCapped ? ` · displaying ${MAX_RENDERED_VESSELS} of ${availableVesselCount}` : ''}` +
-                (staleCount ? ` · ${staleCount} stale ${feedMode === 'demo' ? 'sample' : 'AIS'} fixes; projections hidden.` :
+            status.textContent = availableVesselCount === 0 ? 'No vessels in this feed. Waiting for the next update.' :
+                `${visibleCount} vessels visible · ${vessels.size} rendered of ${availableVesselCount} API records` +
+                (vesselListCapped ? ` · Rendering limit: ${MAX_RENDERED_VESSELS} vessels; filters may include vessels not drawn.` : '') +
+                (observationStaleAfterMs === null ? ' · Freshness configuration unavailable; projections hidden.' :
+                    staleCount ? ` · ${staleCount} stale ${feedMode === 'demo' ? 'sample' : 'AIS'} fixes; projections hidden.` :
                     (feedMode === 'demo' ? ' · Sample observations are fresh.' : ' · AIS fixes are fresh.'));
+
         }
 
         async function fetchMetadata() {
@@ -1149,19 +1158,32 @@
                 if (!response.ok) throw new Error('Metadata unavailable');
                 const metadata = await response.json();
                 if (!['demo', 'live'].includes(metadata.mode)) throw new Error('Unknown feed mode');
-                if (Number.isFinite(metadata.observation_stale_after_seconds) &&
-                    metadata.observation_stale_after_seconds > 0 && metadata.observation_stale_after_seconds <= 1800) {
-                    observationStaleAfterMs = metadata.observation_stale_after_seconds * 1000;
+                if (!Number.isFinite(metadata.observation_stale_after_seconds) ||
+                    metadata.observation_stale_after_seconds <= 0 ||
+                    !Number.isFinite(metadata.prediction_horizon_minutes) || metadata.prediction_horizon_minutes <= 0) {
+                    throw new Error('Invalid projection configuration');
                 }
-                banner.textContent = metadata.mode === 'demo'
-                    ? 'DEMO · Synthetic Baltic vessel positions. Explore constant-course projections, 30 minutes from each fix.'
-                    : 'LIVE · Baltic AIS positions from Digitraffic. Constant-course projections, 30 minutes from each fix.';
+                observationStaleAfterMs = metadata.observation_stale_after_seconds * 1000;
+                predictionHorizonMinutes = metadata.prediction_horizon_minutes;
+                banner.textContent = `${metadata.mode === 'demo'
+                    ? 'DEMO · Synthetic Baltic vessel positions.'
+                    : 'LIVE · Baltic AIS positions from Digitraffic.'} Constant-course projections, ${predictionHorizonMinutes} minutes from each fix.`;
                 banner.dataset.mode = metadata.mode;
                 feedMode = metadata.mode;
+                vessels.forEach(vessel => {
+                    const { predictedPos, isApiPrediction } = determinePrediction(vessel.data);
+                    vessel.hasPrediction = !!predictedPos;
+                    vessel.hasApiPrediction = isApiPrediction;
+                    updatePredictionVisuals(vessel, vessel.lastPosition, predictedPos);
+                });
                 frameDemoFleet();
-                updateFeedStatus();
+                updateUIComponents();
             } catch (error) {
-                banner.textContent = 'Feed mode unavailable · Constant-course projections assume unchanged speed and direction.';
+                banner.textContent = 'Feed configuration unavailable · Server projections hidden until /meta is available.';
+                observationStaleAfterMs = null;
+                predictionHorizonMinutes = null;
+                updateTimeDisplays();
+                updateFeedStatus();
             } finally {
                 clearTimeout(timeoutId);
             }
@@ -1249,14 +1271,12 @@
             // Calculate time difference in minutes, ensuring it's non-negative
             const timeDiffMinutes = Math.max(0, Math.floor((now - lastUpdate) / 60000));
 
-            const { predictedPos, isApiPrediction: hasApiPrediction } = determinePrediction(
-                vesselData, [vesselData.current_latitude, vesselData.current_longitude]
-            );
+            const { predictedPos } = determinePrediction(vesselData);
             const showPredictionSection = !!predictedPos;
 
             let predictionDetails = { time: '', made: '', source: '' };
             if (showPredictionSection) {
-                 predictionDetails = formatPredictionInfo(vesselData, hasApiPrediction, now);
+                 predictionDetails = formatPredictionInfo(vesselData, now);
             }
 
             // Prepare data for the popup template
@@ -1299,7 +1319,7 @@
                     </div>
                 ${popupData.showPrediction ? `
                     <div class="popup-prediction">
-                        <div><i class="fas fa-route"></i> <strong>Constant-course projection · ${PREDICTION_HOURS_AHEAD * 60} min</strong></div>
+                        <div><i class="fas fa-route"></i> <strong>Constant-course projection · ${predictionHorizonMinutes} min</strong></div>
                         ${createPopupRow('Projected position:', popupData.predictedPos)}
                         <div class="prediction-info">
                             ${popupData.predTime ? `<div>Projection for: ${escapeHtml(popupData.predTime)}</div>` : ''}
@@ -1357,26 +1377,11 @@
             return posAcc === true ? 'High' : (posAcc === false ? 'Low' : 'Unknown');
         }
 
-        function formatPredictionInfo(vesselData, hasApiPrediction, now) {
-            // Formats details for the prediction section of the popup
-            let time = '', made = '', source = 'Constant course and speed (browser)';
-            
-            if (hasApiPrediction && vesselData.prediction_for_timestamp) {
-                // Use details from API prediction
-                source = 'Constant course and speed (server)';
-                time = formatDateTime(new Date(vesselData.prediction_for_timestamp));
-                if (vesselData.prediction_made_at) {
-                    const predMadeTime = new Date(vesselData.prediction_made_at);
-                    const predMadeAgoMinutes = Math.max(0, Math.floor((now - predMadeTime) / 60000));
-                    made = `${predMadeAgoMinutes} min ago`;
-                }
-            } else {
-                 // Calculate details for dead reckoning prediction
-                const predTime = new Date(Date.parse(vesselData.current_timestamp) + PREDICTION_HOURS_AHEAD * 3600 * 1000);
-                time = formatDateTime(predTime);
-                made = 'From the latest AIS fix';
-            }
-            return { time, made, source };
+        function formatPredictionInfo(vesselData, now) {
+            const time = formatDateTime(new Date(vesselData.prediction_for_timestamp));
+            const madeAt = Date.parse(vesselData.prediction_made_at);
+            const made = Number.isFinite(madeAt) ? `${Math.max(0, Math.floor((now - madeAt) / 60000))} min ago` : '';
+            return { time, made, source: 'Constant course and speed (server)' };
         }
 
         function formatDateTime(date) {
@@ -1392,46 +1397,7 @@
             }
         }
         
-        // --- Navigation Calculations ---
-        function calculatePredictionPosition(lat, lon, cog, sog, hoursAhead = PREDICTION_HOURS_AHEAD) {
-            // Basic validation of inputs
-            if (!isValidNumber(lat) || !isValidNumber(lon) || !isValidNumber(cog) || !isValidNumber(sog) || sog < MIN_SPEED_MOVING_KNOTS) {
-                return null;
-            }
-            
-            const latRad = degreesToRadians(lat);
-            const lonRad = degreesToRadians(lon);
-            const cogRad = degreesToRadians(((cog % 360) + 360) % 360); // Normalize COG
-            
-            const distNM = sog * hoursAhead;
-            // Add a slightly more generous upper bound for sanity check, e.g., 1.5 * max speed * time
-            if (distNM <= 0 || distNM > (MAX_VALID_SPEED_KNOTS * 1.5 * hoursAhead)) return null; 
-
-            const earthRadiusNM = 3440.065; // Earth radius in nautical miles
-            const angDist = distNM / earthRadiusNM;
-            
-            // Calculate new latitude using spherical law of cosines
-            const newLatRad = Math.asin(
-                Math.sin(latRad) * Math.cos(angDist) +
-                Math.cos(latRad) * Math.sin(angDist) * Math.cos(cogRad)
-            );
-            
-            // Calculate new longitude
-            let newLonRad = lonRad + Math.atan2(
-                Math.sin(cogRad) * Math.sin(angDist) * Math.cos(latRad),
-                Math.cos(angDist) - Math.sin(latRad) * Math.sin(newLatRad)
-            );
-            
-            // Normalize longitude to range -PI to PI
-            newLonRad = ((newLonRad + 3 * Math.PI) % (2 * Math.PI)) - Math.PI; 
-            
-            // Convert back to degrees
-            return [
-                radiansToDegrees(newLatRad),
-                radiansToDegrees(newLonRad)
-            ];
-        }
-        
+        // --- Observation Movement Validation ---
         function calculateDistance(lat1, lon1, lat2, lon2) {
             // Calculates distance between two points using Haversine formula
             if (!isValidNumber(lat1) || !isValidNumber(lon1) || !isValidNumber(lat2) || !isValidNumber(lon2)) return 0;
@@ -1451,11 +1417,6 @@
             return degrees * Math.PI / 180;
         }
 
-        function radiansToDegrees(radians) {
-            // Convert radians to degrees and fix to 6 decimal places
-            return parseFloat((radians * 180 / Math.PI).toFixed(6));
-        }
-
         // --- Validation Helpers ---
         function isValidNumber(value) {
             // Checks if a value is a valid, non-NaN number
@@ -1468,31 +1429,6 @@
                    isValidNumber(pos[0]) && isValidNumber(pos[1]) &&
                    pos[0] >= -90 && pos[0] <= 90 && // Latitude check
                    pos[1] >= -180 && pos[1] <= 180; // Longitude check
-        }
-
-        function isWithinBounds(lat, lon, bounds) {
-            // Checks if coordinates are within specified geographical bounds
-            return lat >= bounds.minLat && lat <= bounds.maxLat && 
-                   lon >= bounds.minLon && lon <= bounds.maxLon;
-        }
-
-        function isValidPrediction(currentPos, predictedPos) {
-            // Validates a prediction based on position validity, distance, and bounds
-            if (!isValidCoordinatePair(currentPos) || !isValidCoordinatePair(predictedPos)) return false;
-
-            // Check distance - prediction shouldn't be too far
-            const distanceNM = calculateDistance(currentPos[0], currentPos[1], predictedPos[0], predictedPos[1]);
-            if (distanceNM > MAX_PREDICTION_DISTANCE_NM) {
-                console.warn(`Prediction distance too large: ${distanceNM.toFixed(2)} NM`);
-                return false;
-            }
-            
-            // Check geographical bounds (e.g., Baltic Sea)
-            if (!isWithinBounds(predictedPos[0], predictedPos[1], BALTIC_SEA_BOUNDS)) {
-                console.warn(`Prediction outside required bounds: Lat ${predictedPos[0]}, Lon ${predictedPos[1]}`);
-                return false;
-            }
-            return true;
         }
 
         function validateVesselMovement(oldPos, newPos, timeElapsedSeconds) {
@@ -1517,7 +1453,7 @@
         function isVesselStale(currentTimestamp) {
             // Staleness is based on the AIS timestamp delta, not the poll interval:
             // a vessel is stale when its last real AIS update is older than the configured threshold.
-            if (!currentTimestamp) return true;
+            if (observationStaleAfterMs === null || !currentTimestamp) return true;
             const timestamp = Date.parse(currentTimestamp);
             return !Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > observationStaleAfterMs;
         }
@@ -1535,6 +1471,7 @@
         async function fetchAndDisplayVessels() {
             if (Date.now() < nextFetchAllowedAt) return; // exponential backoff: skip this poll
             try {
+                if (observationStaleAfterMs === null) await fetchMetadata();
                 const vesselData = await fetchVesselData();
                 fetchFailureCount = 0; // reset backoff on success
                 nextFetchAllowedAt = 0;
@@ -1546,13 +1483,13 @@
                 countdown = COUNTDOWN_SECONDS; // Reset refresh countdown
 
                 // Process the fetched data
-                const { processedVesselIds, apiPredictionCount } = processVesselData(vesselData, timeSinceLastUpdate);
+                const { processedVesselIds } = processVesselData(vesselData, timeSinceLastUpdate);
                 
                 // Remove vessels from the map that are no longer in the dataset
                 removeStaleVessels(processedVesselIds);
                 
                 // Update UI elements (stats, filter counts, status)
-                updateUIComponents(apiPredictionCount);
+                updateUIComponents();
                 
                 // Ensure loading animation completes
                 updateLoadingProgress(100);
@@ -1592,12 +1529,11 @@
 
         function processVesselData(vesselDataArray, timeSinceLastUpdate) {
             // Processes the raw vessel data array from the API
-            let apiPredictionCount = 0;
             const processedVesselIds = new Set(); // Keep track of vessels processed in this batch
 
             if (!Array.isArray(vesselDataArray)) {
                  console.error("Received non-array data from API");
-                 return { processedVesselIds, apiPredictionCount }; // Return empty set and zero count
+                 return { processedVesselIds };
             }
 
             const validFleet = new Map();
@@ -1606,7 +1542,8 @@
                     validFleet.set(data.vessel_id, data);
                 }
             });
-            availableVesselCount = validFleet.size;
+            availableVesselCount = vesselDataArray.length;
+            fleetData = Array.from(validFleet.values());
             vesselListCapped = validFleet.size > MAX_RENDERED_VESSELS;
             const renderList = Array.from(validFleet.values()).slice(0, MAX_RENDERED_VESSELS);
             renderList.forEach(data => processedVesselIds.add(data.vessel_id));
@@ -1628,14 +1565,9 @@
                 const courseAngle = isValidNumber(data.heading) ? data.heading : 
                                    (isValidNumber(data.cog) ? data.cog : 0);
 
-                // Determine Prediction: Check API prediction first, then try calculating
-                let { predictedPos, isApiPrediction } = determinePrediction(data, currentPos);
+                // Use only an unexpired server projection
+                const { predictedPos, isApiPrediction } = determinePrediction(data);
                 
-                // Increment count only for valid API predictions
-                if (predictedPos && isApiPrediction) {
-                    apiPredictionCount++;
-                }
-
                 // Create or Update Vessel object and its map representation
                 if (!vessels.has(vesselId)) {
                     createNewVessel(vesselId, data, currentPos, courseAngle, predictedPos, isApiPrediction);
@@ -1646,45 +1578,14 @@
             });
 
             frameDemoFleet();
-            return { processedVesselIds, apiPredictionCount };
+            return { processedVesselIds };
         }
         
-        function determinePrediction(data, currentPos) {
-            // Determines the prediction position and its source (API or calculated)
-            let predictedPos = null;
-            let isApiPrediction = false;
-            if (isVesselStale(data.current_timestamp)) return { predictedPos, isApiPrediction };
-
-            // 1. Check for a valid API prediction
-            if (Date.parse(data.prediction_for_timestamp) > Date.now() &&
-                isValidNumber(data.predicted_latitude) && isValidNumber(data.predicted_longitude)) {
-                 const apiPredPos = [data.predicted_latitude, data.predicted_longitude];
-                 // Validate the API prediction (distance, bounds)
-                 if (isValidPrediction(currentPos, apiPredPos)) {
-                     predictedPos = apiPredPos;
-                     isApiPrediction = true;
-                 } else {
-                      console.warn(`Invalid API prediction received for ${data.vessel_id}`, apiPredPos);
-                      // Discard invalid API prediction
-                 }
-            }
-            
-            // 2. If no valid API prediction, try calculating dead reckoning if vessel is moving
-            if (!predictedPos && isValidNumber(data.cog) && isValidNumber(data.sog) && data.sog >= MIN_SPEED_MOVING_KNOTS) {
-                 const calculatedPred = calculatePredictionPosition(
-                     currentPos[0], currentPos[1], data.cog, data.sog, PREDICTION_HOURS_AHEAD
-                 );
-                 // Validate the calculated prediction
-                 if (calculatedPred && isValidPrediction(currentPos, calculatedPred)) {
-                     predictedPos = calculatedPred;
-                 } else {
-                     // Log if calculation failed or result was invalid
-                     if(calculatedPred) console.warn(`Invalid calculated prediction for ${data.vessel_id}`, calculatedPred);
-                 }
-            }
-            
-            // Return the determined position (or null) and whether it came from the API
-            return { predictedPos, isApiPrediction };
+        function determinePrediction(data) {
+            const position = [data.predicted_latitude, data.predicted_longitude];
+            const valid = !isVesselStale(data.current_timestamp) &&
+                Date.parse(data.prediction_for_timestamp) > Date.now() && isValidCoordinatePair(position);
+            return { predictedPos: valid ? position : null, isApiPrediction: valid };
         }
 
         function createNewVessel(vesselId, data, currentPos, courseAngle, predictedPos, isApiPrediction) {
@@ -1700,7 +1601,7 @@
                 data: data, // Keep raw data for popup generation
                             predictionLine: null,
                             predictionMarker: null,
-                hasPrediction: !!predictedPos, // Does it have *any* valid prediction (API or calculated)?
+                hasPrediction: !!predictedPos, // Valid server projection
                 hasApiPrediction: isApiPrediction // Specifically, does it have an API prediction?
             };
             vessels.set(vesselId, vessel); // Add to our global map of vessels
@@ -1725,7 +1626,15 @@
             const elapsedSeconds = (Date.parse(data.current_timestamp) - Date.parse(vessel.timestamp)) / 1000;
             if (!validateVesselMovement(prevPos, currentPos, elapsedSeconds)) {
                 console.warn(`Ignoring unrealistic or out-of-order observation for vessel ${data.vessel_id}.`);
-                return; // Keep the marker, projection and popup on the same accepted AIS fix.
+                // Do not keep a previous trajectory when the latest response supplies no usable projection.
+                if (!predictedPos) {
+                    vessel.data = { ...vessel.data, predicted_latitude: null, predicted_longitude: null };
+                    vessel.hasPrediction = false;
+                    vessel.hasApiPrediction = false;
+                    updatePredictionVisuals(vessel, vessel.lastPosition, null);
+                    if (vessel.marker.isPopupOpen()) vessel.marker.setPopupContent(createPopupContent(vessel.data));
+                }
+                return; // Keep the marker on the accepted AIS fix.
             }
             vessel.marker.setLatLng(currentPos);
             updateVesselDirection(vessel, courseAngle);
@@ -1782,7 +1691,7 @@
                  vessel.predictionMarker = createVesselMarker(predictedPos, true); // isPrediction = true
                  addLayer(vessel.predictionMarker);
                  if (landConflict) vessel.predictionMarker.setStyle({ fillOpacity: 0, fillColor: '#8a8a8a', color: '#8a8a8a' }); // hollow grey: crosses land
-                 vessel.predictionMarker.bindTooltip(`${PREDICTION_HOURS_AHEAD * 60} min ahead`, { 
+                 vessel.predictionMarker.bindTooltip(`${predictionHorizonMinutes} min from source fix`, {
                      direction: 'top', permanent: false 
                  });
 
@@ -1813,45 +1722,43 @@
             });
         }
 
-        function updateUIComponents(apiPredictionCount) {
+        function updateFleetCounts() {
+            const projectionCount = fleetData.filter(v => determinePrediction(v).predictedPos).length;
+            document.getElementById('vessel-count').textContent = availableVesselCount;
+            document.getElementById('prediction-count').textContent = projectionCount;
+            updatePredictionStatus(projectionCount);
+            updateFilterCounts();
+        }
+
+        function updateUIComponents() {
             // Central function to update various UI elements after data processing
             
-            // 1. Update Header Stats
-            const vesselCountEl = document.getElementById('vessel-count');
-            const predictionCountEl = document.getElementById('prediction-count');
-            if (vesselCountEl) vesselCountEl.textContent = vessels.size + (vesselListCapped ? ` / ${availableVesselCount}` : '');
-            const projectionCount = Array.from(vessels.values()).filter(v => v.hasPrediction).length;
-            if (predictionCountEl) predictionCountEl.textContent = projectionCount;
-            
-            // 2. Update System Status in Control Panel
-            updatePredictionStatus(projectionCount);
+            // Refresh counts for the full API snapshot
+            updateFleetCounts();
 
-            // 3. Update Filter Counts
-            updateFilterCounts();
-            
-            // 4. Re-apply the currently active filter to reflect updated vessel states
+            // Re-apply the currently active filter to reflect updated vessel states
             applyVesselFilter();
             updateFeedStatus();
 
-            // 5. Update Time Displays in Footer
+            // Update Time Displays in Footer
             updateTimeDisplays();
         }
 
         function updateFilterCounts() {
              // Calculates and updates the counts displayed on filter buttons
-             const allCount = vessels.size;
+             const allCount = availableVesselCount;
              let movingCount = 0;
              let stationaryCount = 0;
              let predictableCount = 0;
 
-             vessels.forEach(v => {
-                 if (isValidNumber(v.speed) && v.speed >= MIN_SPEED_MOVING_KNOTS) {
+             fleetData.forEach(v => {
+                 if (isValidNumber(v.sog) && v.sog >= MIN_SPEED_MOVING_KNOTS) {
                      movingCount++;
-                 } else if (isValidNumber(v.speed)) {
+                 } else if (isValidNumber(v.sog)) {
                      stationaryCount++;
                  }
-                 // Include the same server and browser projections shown on the map.
-                 if (v.hasPrediction) {
+                 // Count projections across the full API fleet, including unrendered vessels.
+                 if (determinePrediction(v).predictedPos) {
                      predictableCount++;
                  }
              });

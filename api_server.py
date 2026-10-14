@@ -414,7 +414,8 @@ def get_vessels(
 @app.get("/meta")
 def metadata():
     return {"mode": "demo" if DEMO_MODE else "live",
-            "prediction_method": "dead_reckoning", "prediction_horizon_minutes": 30}
+            "prediction_method": "dead_reckoning", "prediction_horizon_minutes": 30,
+            "observation_stale_after_seconds": 60}
 
 
 @app.get("/health")
