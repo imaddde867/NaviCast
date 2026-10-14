@@ -114,3 +114,13 @@ def test_projection_from_an_older_fix_is_not_attached_to_new_position():
     result = api_server._format_vessel_row(row)
     assert result['predicted_latitude'] is None
     assert result['prediction_method'] is None
+
+
+def test_projection_outside_baltic_bounds_is_hidden():
+    from demo_data import sample_rows
+    row = sample_rows()[0]
+    row['predicted_latitude'] = 80.0  # outside config.BOUNDS lat 50-70
+    row['predicted_longitude'] = 25.0
+    result = api_server._format_vessel_row(row)
+    assert result['predicted_latitude'] is None
+    assert result['prediction_method'] is None

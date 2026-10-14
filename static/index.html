@@ -1592,7 +1592,10 @@
             frameDemoFleet();
             return { processedVesselIds };
         }
-        
+
+        // The server owns projection validity: /vessels only returns projections that
+        // pass server-side bounds, horizon and expiry checks, so the browser guards
+        // only coordinate plausibility and freshness.
         function determinePrediction(data) {
             // Only render a valid, unexpired projection actually returned by the API.
             if (!data || isVesselStale(data.current_timestamp) ||
