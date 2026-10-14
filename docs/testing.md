@@ -96,6 +96,15 @@ it. Times are runner-reported elapsed times, not GitHub job budgets.
 | Compose configuration | Passed | Configuration check, no services started |
 | Docker build | Passed | BuildKit step times reported; total not recorded |
 
+Build/configuration timing rerun, 2026-10-14: a detached clean checkout of the
+same unchanged main `dca965c` used `npm ci --ignore-scripts`, then measured wall
+elapsed time with `time.perf_counter` around each complete command. Every check
+exited zero: Wrangler dry run **0.529808 s**, Bash syntax
+**0.000981 s**, Compose config **0.026530 s** and
+Docker build **0.498214 s**. Dependencies and Docker layers were
+cached; these are explicitly later reproducible baseline measurements, not a
+reconstruction of the original uncaptured build total or cold-install times.
+
 The initial sandbox Node invocation reported only three passing *files*, not
 individual tests. A rerun outside the sandbox verified 79 individual tests. The
 initial sandbox Python run stalled; the verified runs above allowed local socket
