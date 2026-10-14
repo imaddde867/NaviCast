@@ -1042,7 +1042,6 @@
             vessels.forEach(vessel => {
                 if (vessel.hasPrediction && isVesselStale(vessel.data.current_timestamp)) {
                     vessel.hasPrediction = false;
-                    vessel.hasApiPrediction = false;
                     updatePredictionVisuals(vessel, vessel.lastPosition, null);
                     if (vessel.marker.isPopupOpen()) vessel.marker.setPopupContent(createPopupContent(vessel.data));
                     projectionsExpired = true;
@@ -1579,14 +1578,14 @@
                                    (isValidNumber(data.cog) ? data.cog : 0);
 
                 // Determine Prediction: Check API prediction first, then try calculating
-                let { predictedPos, isApiPrediction } = determinePrediction(data, currentPos);
+                const { predictedPos } = determinePrediction(data);
 
                 // Create or Update Vessel object and its map representation
                 if (!vessels.has(vesselId)) {
-                    createNewVessel(vesselId, data, currentPos, courseAngle, predictedPos, isApiPrediction);
+                    createNewVessel(vesselId, data, currentPos, courseAngle, predictedPos);
                     } else {
-                    updateExistingVessel(vessels.get(vesselId), data, currentPos, courseAngle, 
-                                        predictedPos, timeSinceLastUpdate, isApiPrediction);
+                    updateExistingVessel(vessels.get(vesselId), data, currentPos, courseAngle,
+                                        predictedPos, timeSinceLastUpdate);
                 }
             });
 
@@ -1598,14 +1597,14 @@
             // Only render a valid, unexpired projection actually returned by the API.
             if (!data || isVesselStale(data.current_timestamp) ||
                 !(Date.parse(data.prediction_for_timestamp) > Date.now())) {
-                return { predictedPos: null, isApiPrediction: false };
+                return { predictedPos: null };
             }
             const predictedPos = [data.predicted_latitude, data.predicted_longitude];
             const valid = isValidCoordinatePair(predictedPos);
-            return { predictedPos: valid ? predictedPos : null, isApiPrediction: valid };
+            return { predictedPos: valid ? predictedPos : null };
         }
 
-        function createNewVessel(vesselId, data, currentPos, courseAngle, predictedPos, isApiPrediction) {
+        function createNewVessel(vesselId, data, currentPos, courseAngle, predictedPos) {
             // Creates a new vessel object and its marker
             const marker = createVesselMarker(currentPos, false, courseAngle);
             addLayer(marker); // Add marker to map
@@ -1618,8 +1617,7 @@
                 data: data, // Keep raw data for popup generation
                             predictionLine: null,
                             predictionMarker: null,
-                hasPrediction: !!predictedPos, // Only server-provided trajectories
-                hasApiPrediction: isApiPrediction // Specifically, does it have an API prediction?
+                hasPrediction: !!predictedPos // Only server-provided trajectories
             };
             vessels.set(vesselId, vessel); // Add to our global map of vessels
 
@@ -1635,7 +1633,7 @@
             return vessel;
         }
 
-        function updateExistingVessel(vessel, data, currentPos, courseAngle, predictedPos, timeSinceLastUpdate, isApiPrediction) {
+        function updateExistingVessel(vessel, data, currentPos, courseAngle, predictedPos, timeSinceLastUpdate) {
             // Updates an existing vessel object and its marker
             const oldLatLng = vessel.marker.getLatLng();
             const prevPos = [oldLatLng.lat, oldLatLng.lng];
@@ -1653,7 +1651,6 @@
             vessel.timestamp = data.current_timestamp;
             vessel.data = data; // Store the latest raw data
             vessel.hasPrediction = !!predictedPos; // Update based on latest prediction attempt
-            vessel.hasApiPrediction = isApiPrediction;
             
             // Update visual elements based on new state
             updateMovingIndicator(vessel);

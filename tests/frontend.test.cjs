@@ -107,8 +107,9 @@ test('stale or invalid AIS timestamps do not produce a forecast', () => {
     const app = dashboard();
     for (const timestamp of ['2020-01-01T00:00:00Z', 'not-a-date', null]) {
         app.context.data = vessel(1, { current_timestamp: timestamp,
-            predicted_latitude: 60, predicted_longitude: 22.1 });
-        assert.equal(app.run('determinePrediction(data, [60, 22]).predictedPos'), null);
+            predicted_latitude: 60, predicted_longitude: 22.1,
+            prediction_for_timestamp: new Date(Date.now() + 1800000).toISOString() });
+        assert.equal(app.run('determinePrediction(data).predictedPos'), null);
         assert.equal(app.run('isVesselStale(data.current_timestamp)'), true);
     }
 });
@@ -143,7 +144,8 @@ test('missing or invalid /meta never enables a guessed stale threshold or horizo
 test('expired, missing, incomplete and rejected API forecasts never produce substitutes', () => {
     const app = dashboard();
     for (const overrides of [
-        {}, { predicted_latitude: 60, predicted_longitude: 22.1 },
+        { current_timestamp: null },
+        { predicted_latitude: 60, predicted_longitude: 22.1 },
         { predicted_latitude: 60, predicted_longitude: 22.1, prediction_for_timestamp: '2020-01-01T00:00:00Z' },
         { predicted_latitude: 190, predicted_longitude: 22.1,
             prediction_for_timestamp: new Date(Date.now() + 1800000).toISOString() }
@@ -426,4 +428,16 @@ test('expired projections refresh the fleet-wide projection count', () => {
     assert.equal(app.elements.get('prediction-count').textContent, 600);
     app.run('vessels.get(1).data.current_timestamp = "2020-01-01T00:00:00Z"; updateTimeDisplays()');
     assert.equal(app.elements.get('prediction-count').textContent, 599);
+});
+
+test('determinePrediction exposes only the projected position', () => {
+    const app = dashboard();
+    app.context.data = vessel(1, { predicted_latitude: 60, predicted_longitude: 22.1,
+        prediction_for_timestamp: new Date(Date.now() + 1800000).toISOString() });
+    const keys = app.run('Object.keys(determinePrediction(data))');
+    assert.equal(keys.length, 1);
+    assert.equal(keys[0], 'predictedPos');
+    app.context.batch = [app.context.data];
+    app.run('processVesselData(batch, 0)');
+    assert.equal(app.run("'hasApiPrediction' in vessels.get(1)"), false);
 });
