@@ -1,0 +1,14 @@
+[
+  "dashboard.spec.mjs::1000 API records disclose both map and API limits correctly",
+  "dashboard.spec.mjs::600 API records disclose both map and API limits correctly",
+  "dashboard.spec.mjs::API errors are visible and exponential retry recovers",
+  "dashboard.spec.mjs::expired projection never creates a substitute trajectory",
+  "dashboard.spec.mjs::filters, markers, popup escaping and counts stay consistent",
+  "dashboard.spec.mjs::invalid metadata never guesses configuration or requests forecasts",
+  "dashboard.spec.mjs::invalid projection never creates a substitute trajectory",
+  "dashboard.spec.mjs::missing projection never creates a substitute trajectory",
+  "dashboard.spec.mjs::mobile navigation disclaimer and essential controls are visible",
+  "dashboard.spec.mjs::projection removed on the next actual poll clears line and endpoint",
+  "dashboard.spec.mjs::server land warning and grey dashed rendering survive in the real map",
+  "dashboard.spec.mjs::valid projection renders its exact server trajectory and real popup"
+]

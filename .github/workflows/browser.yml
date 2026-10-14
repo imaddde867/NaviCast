@@ -18,7 +18,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
-      - run: python scripts/check_test_report.py reports/browser.xml
+      - run: python scripts/check_test_report.py reports/browser.xml tests/inventory/browser.json
         if: always()
       - uses: actions/upload-artifact@v4
         if: always()
