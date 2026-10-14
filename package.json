@@ -8,7 +8,8 @@
     "deploy": "wrangler deploy",
     "check:deploy": "wrangler deploy --dry-run",
     "test:runtime": "vitest run",
-    "test:ci": "node --test --test-reporter=spec --test-reporter=junit --test-reporter-destination=stdout --test-reporter-destination=reports/node.xml tests/*.test.cjs tests/*.test.mjs"
+    "test:ci": "node --test --test-reporter=spec --test-reporter=junit --test-reporter-destination=stdout --test-reporter-destination=reports/node.xml tests/*.test.cjs tests/*.test.mjs",
+    "check:bundle": "node scripts/check_bundle.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

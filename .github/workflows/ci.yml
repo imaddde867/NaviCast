@@ -2,6 +2,9 @@ name: Checks
 on: [push, pull_request]
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 jobs:
   python-tests:
     runs-on: ubuntu-latest
@@ -75,6 +78,14 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run check:deploy
+      - run: mkdir -p reports && npm run check:bundle 2>&1 | tee reports/bundle.log
       - run: bash -n start_navicast.sh
       - run: docker compose config --quiet
       - run: docker build -t navicast-check .
+      - run: bash scripts/check_docker.sh 2>&1 | tee reports/docker-smoke.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: infrastructure-check-logs
+          path: reports/
+          if-no-files-found: warn
