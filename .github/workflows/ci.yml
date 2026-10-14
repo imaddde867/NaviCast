@@ -52,6 +52,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: mkdir -p reports
       - run: npm run test:ci
+      - run: node scripts/check_projection_mutations.mjs
       - uses: actions/setup-python@v5
         if: always()
         with:

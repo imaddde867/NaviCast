@@ -1,0 +1,157 @@
+{
+  "now": 1791979200000,
+  "cases": [
+    {
+      "mmsi": 230000001,
+      "scenario": "northward water projection"
+    },
+    {
+      "mmsi": 230000002,
+      "scenario": "eastward water projection"
+    },
+    {
+      "mmsi": 230000003,
+      "scenario": "Gotland land intersection"
+    },
+    {
+      "mmsi": 230000004,
+      "scenario": "outside coastline coverage"
+    },
+    {
+      "mmsi": 230000005,
+      "scenario": "start on mapped land"
+    },
+    {
+      "mmsi": 230000006,
+      "scenario": "missing speed"
+    },
+    {
+      "mmsi": 230000007,
+      "scenario": "null speed"
+    },
+    {
+      "mmsi": 230000008,
+      "scenario": "AIS speed sentinel"
+    },
+    {
+      "mmsi": 230000009,
+      "scenario": "boolean speed"
+    },
+    {
+      "mmsi": 230000010,
+      "scenario": "negative speed"
+    },
+    {
+      "mmsi": 230000011,
+      "scenario": "missing course"
+    },
+    {
+      "mmsi": 230000012,
+      "scenario": "invalid course"
+    },
+    {
+      "mmsi": 230000013,
+      "scenario": "AIS course sentinel"
+    },
+    {
+      "mmsi": 230000014,
+      "scenario": "below minimum moving speed"
+    },
+    {
+      "mmsi": 230000015,
+      "scenario": "stationary"
+    },
+    {
+      "mmsi": 230000016,
+      "scenario": "displacement cap"
+    },
+    {
+      "mmsi": 230000017,
+      "scenario": "projected longitude outside region"
+    },
+    {
+      "mmsi": 230000018,
+      "scenario": "projected latitude outside region"
+    },
+    {
+      "mmsi": 230000019,
+      "scenario": "last valid observation millisecond"
+    },
+    {
+      "mmsi": 230000020,
+      "scenario": "south boundary retained without projection"
+    },
+    {
+      "mmsi": 230000021,
+      "scenario": "north boundary retained without projection"
+    },
+    {
+      "mmsi": 230000022,
+      "scenario": "decimal string motion accepted"
+    },
+    {
+      "mmsi": 230000023,
+      "scenario": "supplied fake forecast ignored for missing motion"
+    },
+    {
+      "mmsi": 230000030,
+      "scenario": "stale at exact horizon",
+      "expected": "rejected"
+    },
+    {
+      "mmsi": 230000031,
+      "scenario": "future",
+      "expected": "rejected"
+    },
+    {
+      "mmsi": 230000032,
+      "scenario": "invalid time",
+      "expected": "rejected"
+    },
+    {
+      "mmsi": 230000033,
+      "scenario": "missing time",
+      "expected": "rejected"
+    },
+    {
+      "mmsi": 230000034,
+      "scenario": "invalid latitude",
+      "expected": "rejected"
+    },
+    {
+      "mmsi": 230000035,
+      "scenario": "invalid longitude",
+      "expected": "rejected"
+    },
+    {
+      "mmsi": 230000036,
+      "scenario": "boolean coordinate",
+      "expected": "rejected"
+    },
+    {
+      "mmsi": 230000037,
+      "scenario": "south of region",
+      "expected": "rejected"
+    },
+    {
+      "mmsi": 230000038,
+      "scenario": "east of region",
+      "expected": "rejected"
+    },
+    {
+      "mmsi": 0,
+      "scenario": "zero MMSI",
+      "expected": "rejected"
+    },
+    {
+      "mmsi": 1.5,
+      "scenario": "fractional MMSI",
+      "expected": "rejected"
+    },
+    {
+      "mmsi": true,
+      "scenario": "boolean MMSI",
+      "expected": "rejected"
+    }
+  ]
+}
