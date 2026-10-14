@@ -29,7 +29,7 @@ jobs:
       - run: pip install -r requirements-dev.txt -r research/requirements.txt
       - run: mkdir -p reports
       - run: python -m pytest tests research -q -ra --durations=10 --junitxml=reports/python.xml
-      - run: python scripts/check_test_report.py reports/python.xml
+      - run: python scripts/check_test_report.py reports/python.xml tests/inventory/python.json
         if: always()
       - uses: actions/upload-artifact@v4
         if: always()
@@ -53,7 +53,7 @@ jobs:
         if: always()
         with:
           python-version: '3.11'
-      - run: python scripts/check_test_report.py reports/node.xml
+      - run: python scripts/check_test_report.py reports/node.xml tests/inventory/node.json
         if: always()
       - uses: actions/upload-artifact@v4
         if: always()

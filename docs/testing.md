@@ -41,6 +41,12 @@ even when a test command fails. Missing, malformed, empty, skipped or failing
 reports cannot pass the guard. Expected failures also count as skipped and need
 an explicit policy change before inclusion in a required suite.
 
+Required suites also compare the exact testcase identities in
+`tests/inventory/*.json`. A nonempty passing subset or file-only wrapper report
+cannot substitute for required scenarios. Inventories are reviewed suite
+bookkeeping, not projection oracles: additions may pass without raising a total
+count target; removing a required behavior needs an explicit inventory change.
+
 ## Baseline audit
 
 Measured on 2026-10-14 at `dca965c02e09247b62b69e19170531d5aa52d85e`

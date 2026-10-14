@@ -41,3 +41,12 @@ def test_required_ci_rejects_deselection():
     )
     assert result.returncode == 4
     assert 'must not be deselected' in result.stderr
+
+
+def test_successful_subset_or_file_wrapper_cannot_replace_required_testcases(tmp_path):
+    path = tmp_path / 'report.xml'
+    path.write_text('<testsuites><testcase classname="browser" name="projection"/></testsuites>')
+    required = ['browser::projection', 'browser::render limit notice']
+    assert not report.check(path, required)
+    path.write_text('<testsuites><testcase classname="test" name="tests/browser.spec.mjs"/></testsuites>')
+    assert not report.check(path, required)
