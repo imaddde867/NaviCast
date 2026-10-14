@@ -150,3 +150,8 @@ Do not merge an implementation PR before CI passes, and keep production
 deployment approval manual. Job timeouts currently bound hangs to 10 minutes
 for test jobs and 15 minutes for builds; they are operational limits, not measured
 performance regression budgets. Record actual GitHub job durations after CI.
+
+PR #39 CI run `38571765554` verified Python 3.11: **123 passed in 1.74 s**,
+zero skips/deselections. Node executed 79 cases with zero skips. Whole-job times
+were Python 35 s, Node 10 s, builds 33 s (including setup and uploads). All three
+jobs passed; this establishes a first measurement, not a stable timing budget.
