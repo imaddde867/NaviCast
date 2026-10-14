@@ -89,14 +89,16 @@ test('invalid and duplicate records cannot consume valid fleet capacity', () => 
     assert.equal(app.run('vessels.has(501)'), true);
 });
 
-test('browser projection time is thirty minutes after the AIS fix', () => {
+test('server projection time and horizon come from metadata', async () => {
     const app = dashboard();
-    app.context.data = vessel(1, { current_timestamp: '2026-10-13T09:00:00Z' });
-    const result = app.run("formatPredictionInfo(data, false, new Date('2026-10-13T09:10:00Z'))");
-    assert.equal(result.time, new Date('2026-10-13T09:30:00Z').toLocaleString('en-US', {
-        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
-    }));
-    assert.match(result.source, /constant.course/i);
+    app.context.AbortController = AbortController;
+    app.context.fetch = async () => ({ ok: true, json: async () => ({
+        mode: 'live', observation_stale_after_seconds: 300, prediction_horizon_minutes: 45
+    }) });
+    await app.run('fetchMetadata()');
+    app.context.data = vessel(1, { predicted_latitude: 60, predicted_longitude: 22.1,
+        prediction_for_timestamp: new Date(Date.now() + 45 * 60000).toISOString() });
+    assert.match(app.run('createPopupContent(data).innerHTML'), /45 min/);
 });
 
 test('stale or invalid AIS timestamps do not produce a forecast', () => {
@@ -113,35 +115,44 @@ test('metadata adjusts hosted REST observation staleness without changing the lo
     const app = dashboard();
     app.context.AbortController = AbortController;
     app.context.fetch = async () => ({ ok: true, json: async () => ({
-        mode: 'live', observation_stale_after_seconds: 300
+        mode: 'live', observation_stale_after_seconds: 300, prediction_horizon_minutes: 30
     }) });
     await app.run('fetchMetadata()');
     assert.equal(app.run('isVesselStale(new Date(Date.now() - 180000).toISOString())'), false);
     assert.equal(app.run('isVesselStale(new Date(Date.now() - 360000).toISOString())'), true);
 });
 
-test('missing or invalid metadata keeps the default 60-second staleness threshold', async () => {
+test('missing or invalid /meta never enables a guessed stale threshold or horizon', async () => {
     for (const metadata of [
-        { mode: 'live' },
-        { mode: 'live', observation_stale_after_seconds: 0 },
-        { mode: 'live', observation_stale_after_seconds: 1801 },
-        { mode: 'live', observation_stale_after_seconds: '300' }
+        { mode: 'live' }, { mode: 'live', observation_stale_after_seconds: 0, prediction_horizon_minutes: 30 },
+        { mode: 'live', observation_stale_after_seconds: 300, prediction_horizon_minutes: null },
+        { mode: 'live', observation_stale_after_seconds: '300', prediction_horizon_minutes: 30 }
     ]) {
         const app = dashboard();
         app.context.AbortController = AbortController;
         app.context.fetch = async () => ({ ok: true, json: async () => metadata });
-        await app.run('fetchMetadata()');
-        assert.equal(app.run('isVesselStale(new Date(Date.now() - 90000).toISOString())'), true);
+        assert.equal(await app.run('fetchMetadata()'), false);
+        assert.equal(app.run('isVesselStale(new Date().toISOString())'), true);
+        assert.match(app.elements.get('mode-banner').textContent, /configuration unavailable/i);
     }
 });
 
-test('expired API forecast is replaced with a projection from a fresh fix', () => {
+test('expired, missing, incomplete and rejected API forecasts never produce substitutes', () => {
     const app = dashboard();
-    app.context.data = vessel(1, { predicted_latitude: 60, predicted_longitude: 22.1,
-        prediction_for_timestamp: '2020-01-01T00:00:00Z', prediction_method: 'dead_reckoning' });
-    const result = app.run('determinePrediction(data, [60, 22])');
-    assert.equal(result.isApiPrediction, false);
-    assert.notEqual(result.predictedPos, null);
+    for (const overrides of [
+        {}, { predicted_latitude: 60, predicted_longitude: 22.1 },
+        { predicted_latitude: 60, predicted_longitude: 22.1, prediction_for_timestamp: '2020-01-01T00:00:00Z' },
+        { predicted_latitude: 190, predicted_longitude: 22.1,
+            prediction_for_timestamp: new Date(Date.now() + 1800000).toISOString() }
+    ]) {
+        app.context.data = vessel(1, overrides);
+        assert.equal(app.run('determinePrediction(data).predictedPos'), null);
+        app.context.batch = [app.context.data];
+        app.run('processVesselData(batch, 0)');
+        assert.equal(app.run('vessels.get(1).predictionMarker'), null);
+        assert.equal(app.run('vessels.get(1).hasPrediction'), false);
+        assert.equal(app.run('createPopupContent(data).innerHTML').includes('popup-prediction'), false);
+    }
 });
 
 test('vessel identity, country and type are escaped in popup HTML', () => {
@@ -164,11 +175,13 @@ test('popup suppresses stale forecast details as well as the map forecast', () =
     assert.equal(app.run('createPopupContent(data).innerHTML').includes('popup-prediction'), false);
 });
 
-test('projection filter includes browser projections and respects display toggles', () => {
+test('projection filter includes only server projections and respects display toggles', () => {
     const app = dashboard();
-    app.context.batch = [vessel(1)];
+    app.context.batch = [vessel(1, { predicted_latitude: 60, predicted_longitude: 22.1,
+        prediction_for_timestamp: new Date(Date.now() + 1800000).toISOString() }), vessel(2)];
     app.run('processVesselData(batch, 0); activeFilter = "predictable"; applyVesselFilter()');
     assert.equal(app.run('map.hasLayer(vessels.get(1).marker)'), true);
+    assert.equal(app.run('map.hasLayer(vessels.get(2).marker)'), false);
     app.run('handlePredictionToggle.call({ checked: false })');
     assert.equal(app.run('map.hasLayer(vessels.get(1).predictionMarker)'), false);
     app.run('handlePredictionToggle.call({ checked: true })');
@@ -177,7 +190,8 @@ test('projection filter includes browser projections and respects display toggle
 
 test('aging AIS fixes clear their map projections between API updates', () => {
     const app = dashboard();
-    app.context.batch = [vessel(1)];
+    app.context.batch = [vessel(1, { predicted_latitude: 60, predicted_longitude: 22.1,
+        prediction_for_timestamp: new Date(Date.now() + 1800000).toISOString() })];
     app.run('processVesselData(batch, 0)');
     assert.equal(app.run('map.hasLayer(vessels.get(1).predictionMarker)'), true);
     app.run('vessels.get(1).data.current_timestamp = "2020-01-01T00:00:00Z"; updateTimeDisplays()');
@@ -198,7 +212,8 @@ test('metadata identifies synthetic demo data without inferring mode from vessel
     const app = dashboard();
     app.context.AbortController = AbortController;
     app.context.fetch = async () => ({ ok: true, json: async () => ({
-        mode: 'demo', prediction_method: 'dead_reckoning', prediction_horizon_minutes: 30
+        mode: 'demo', prediction_method: 'dead_reckoning', prediction_horizon_minutes: 30,
+        observation_stale_after_seconds: 300
     }) });
     await app.run('fetchMetadata()');
     assert.match(app.elements.get('mode-banner').textContent, /demo/i);
@@ -235,7 +250,7 @@ test('basemap credits OpenStreetMap and Digitraffic data and its licence', () =>
 test('first demo fleet is framed once without resetting the view on later polls', async () => {
     const app = dashboard();
     app.context.AbortController = AbortController;
-    app.context.fetch = async () => ({ ok: true, json: async () => ({ mode: 'demo' }) });
+    app.context.fetch = async () => ({ ok: true, json: async () => ({ mode: 'demo', prediction_horizon_minutes: 30, observation_stale_after_seconds: 300 }) });
     await app.run('fetchMetadata()');
     app.context.batch = [vessel(1, { current_latitude: 55, current_longitude: 15 }),
         vessel(2, { current_latitude: 66, current_longitude: 26 })];
@@ -250,7 +265,7 @@ test('demo framing works when metadata arrives after the vessel response', async
     app.context.batch = [vessel(1)];
     app.run('processVesselData(batch, 0)');
     app.context.AbortController = AbortController;
-    app.context.fetch = async () => ({ ok: true, json: async () => ({ mode: 'demo' }) });
+    app.context.fetch = async () => ({ ok: true, json: async () => ({ mode: 'demo', prediction_horizon_minutes: 30, observation_stale_after_seconds: 300 }) });
     await app.run('fetchMetadata()');
     assert.equal(app.fittedViews.length, 1);
     app.run('updateFeedStatus()');
@@ -338,4 +353,25 @@ test('unknown motion is excluded from stationary count and filter on create and 
     assert.equal(app.run('vessels.get(2).speed'), null);
     assert.equal(app.elements.get('filter-stationary').textContent, 'Stationary (0)');
     assert.equal(app.run('map.hasLayer(vessels.get(2).marker)'), false);
+});
+
+test('500 map markers do not disguise API fleet totals or projections', () => {
+    const app = dashboard();
+    const target = new Date(Date.now() + 1800000).toISOString();
+    app.context.batch = Array.from({ length: 600 }, (_, i) => vessel(i + 1, {
+        predicted_latitude: 60, predicted_longitude: 22.1, prediction_for_timestamp: target
+    }));
+    app.run('processVesselData(batch, 0); updateUIComponents(0)');
+    assert.equal(app.run('vessels.size'), 500);
+    assert.equal(app.elements.get('vessel-count').textContent, 600);
+    assert.equal(app.elements.get('prediction-count').textContent, 600);
+    assert.equal(app.elements.get('render-notice').hidden, false);
+    assert.match(app.elements.get('render-notice').textContent, /500 of 600/);
+    assert.equal(app.elements.get('filter-all').textContent, 'All on map (500)');
+});
+
+test('safety disclaimer persists in narrow viewport markup', () => {
+    assert.match(html, /Not for navigation/);
+    assert.doesNotMatch(html, /\.mode-note, \.current-time \{ display: none/);
+    assert.doesNotMatch(script, /function calculatePredictionPosition/);
 });
