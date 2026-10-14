@@ -2,7 +2,7 @@
   "name": "navicast",
   "private": true,
   "scripts": {
-    "test": "node --test tests/frontend.test.cjs tests/worker.test.mjs tests/collector.test.mjs",
+    "test": "node --test tests/frontend.test.cjs tests/worker.test.mjs tests/collector.test.mjs tests/golden.test.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "check:deploy": "wrangler deploy --dry-run"

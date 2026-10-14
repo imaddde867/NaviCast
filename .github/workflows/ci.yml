@@ -31,6 +31,7 @@ jobs:
       - run: python -m pytest -q
       - run: npm ci --ignore-scripts
       - run: npm test
+      - run: node scripts/check_projection_mutations.mjs
       - run: npm run check:deploy
       - run: bash -n start_navicast.sh
       - run: docker compose config --quiet
