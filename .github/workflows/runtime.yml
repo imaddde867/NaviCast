@@ -1,0 +1,30 @@
+name: Worker runtime
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  worker-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:runtime
+      - uses: actions/setup-python@v5
+        if: always()
+        with:
+          python-version: '3.11'
+      - run: python scripts/check_test_report.py reports/runtime.xml
+        if: always()
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: worker-runtime-report
+          path: reports/
+          if-no-files-found: error

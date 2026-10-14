@@ -3,11 +3,14 @@
   "private": true,
   "scripts": {
     "test": "node --test tests/frontend.test.cjs tests/worker.test.mjs tests/collector.test.mjs",
+    "test:runtime": "vitest run",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "check:deploy": "wrangler deploy --dry-run"
   },
   "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.2",
+    "vitest": "5.0.4",
     "wrangler": "4.149.0"
   }
 }
