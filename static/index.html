@@ -1648,6 +1648,13 @@
                 // Clear projection if the rejected observation no longer provides one
                 if (!predictedPos && vessel.hasPrediction) {
                     vessel.hasPrediction = false;
+                    // Invalidate stored prediction fields to prevent toggle from recreating trajectory
+                    vessel.data.predicted_latitude = null;
+                    vessel.data.predicted_longitude = null;
+                    vessel.data.prediction_for_timestamp = null;
+                    vessel.data.prediction_made_at = null;
+                    vessel.data.prediction_method = null;
+                    vessel.data.projection_land_conflict = null;
                     updatePredictionVisuals(vessel, vessel.lastPosition, null);
                     if (vessel.marker.isPopupOpen()) vessel.marker.setPopupContent(createPopupContent(vessel.data));
                 }

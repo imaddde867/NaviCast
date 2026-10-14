@@ -473,6 +473,15 @@ test('rejected observations with missing server predictions clear obsolete proje
     app.run('processVesselData(batch, 0); updateUIComponents()');
     assert.equal(app.run('vessels.get(1).hasPrediction'), false);
     assert.equal(app.elements.get('prediction-count').textContent, 0);
+    // Verify stored prediction fields are nullified
+    assert.equal(app.run('vessels.get(1).data.predicted_latitude'), null);
+    assert.equal(app.run('vessels.get(1).data.predicted_longitude'), null);
+    assert.equal(app.run('vessels.get(1).data.prediction_for_timestamp'), null);
+    // Verify toggle cannot recreate the trajectory
+    app.run('handlePredictionToggle.call({ checked: false })');
+    app.run('handlePredictionToggle.call({ checked: true })');
+    assert.equal(app.run('vessels.get(1).hasPrediction'), false);
+    assert.equal(app.elements.get('prediction-count').textContent, 0);
 });
 
 test('prediction toggle respects fresh and stale server projections', () => {
