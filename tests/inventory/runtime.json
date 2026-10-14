@@ -1,0 +1,14 @@
+[
+  "tests/runtime/worker.test.mjs::a real D1 write rejection fails the cron instead of reporting success",
+  "tests/runtime/worker.test.mjs::cron and collector database failures propagate; health fails closed",
+  "tests/runtime/worker.test.mjs::daily cron stores metadata without coordinates",
+  "tests/runtime/worker.test.mjs::entrypoint metadata and invalid queries need no upstream",
+  "tests/runtime/worker.test.mjs::failed upstream cron writes nothing and unknown cron rejects",
+  "tests/runtime/worker.test.mjs::list, detail and exports agree through real entrypoint and runtime cache",
+  "tests/runtime/worker.test.mjs::minute cron writes real migrated D1, gzip, timestamps and raw sentinels once",
+  "tests/runtime/worker.test.mjs::real migration enforces kind and null constraints",
+  "tests/runtime/worker.test.mjs::retention boundary blocks cron before upstream and leaves database unchanged",
+  "tests/runtime/worker.test.mjs::upstream http failure returns generic 503",
+  "tests/runtime/worker.test.mjs::upstream network failure returns generic 503",
+  "tests/runtime/worker.test.mjs::upstream schema failure returns generic 503"
+]
