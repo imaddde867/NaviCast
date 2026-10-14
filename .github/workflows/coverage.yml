@@ -35,11 +35,11 @@ jobs:
       - run: python -m coverage run --branch --source=api_server,config,mqtt_client,prediction_service,evaluate -m pytest tests research -q -ra --junitxml=reports/python.xml
       - run: python -m coverage json -o reports/python-coverage.json && python -m coverage xml -o reports/python-coverage.xml && python -m coverage report
         if: always()
-      - run: python scripts/check_test_report.py reports/python.xml && python scripts/check_coverage.py python reports/python-coverage.json
+      - run: python scripts/check_test_report.py reports/python.xml tests/inventory/python.json && python scripts/check_coverage.py python reports/python-coverage.json
         if: always()
       - run: npm ci --ignore-scripts
       - run: npm run test:coverage
-      - run: python scripts/check_test_report.py reports/node.xml && python scripts/check_coverage.py node reports/node.lcov
+      - run: python scripts/check_test_report.py reports/node.xml tests/inventory/node.json && python scripts/check_coverage.py node reports/node.lcov
         if: always()
       - uses: actions/upload-artifact@v4
         if: always()

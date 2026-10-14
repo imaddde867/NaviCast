@@ -20,7 +20,7 @@ jobs:
       - run: npm run test:browser
       - run: npm run report:browser-coverage
         if: always()
-      - run: python scripts/check_test_report.py reports/browser.xml
+      - run: python scripts/check_test_report.py reports/browser.xml tests/inventory/browser.json
         if: always()
       - run: python scripts/check_coverage.py browser reports/browser-coverage.json
         if: always()
