@@ -403,3 +403,14 @@ test('coastline flag survives the frontend API-only projection path', () => {
     app.run('processVesselData(batch, 0)');
     assert.match(app.run('createPopupContent(batch[0]).innerHTML'), /Coast ahead/);
 });
+
+test('processVesselData returns only the processed id set', () => {
+    const app = dashboard();
+    app.context.batch = [vessel(1), vessel(2)];
+    const keys1 = app.run('Object.keys(processVesselData(batch, 0))');
+    assert.equal(keys1.length, 1);
+    assert.equal(keys1[0], 'processedVesselIds');
+    const keys2 = app.run('Object.keys(processVesselData("not-an-array", 0))');
+    assert.equal(keys2.length, 1);
+    assert.equal(keys2[0], 'processedVesselIds');
+});

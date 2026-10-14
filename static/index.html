@@ -1544,12 +1544,11 @@
 
         function processVesselData(vesselDataArray, timeSinceLastUpdate) {
             // Processes the raw vessel data array from the API
-            let apiPredictionCount = 0;
             const processedVesselIds = new Set(); // Keep track of vessels processed in this batch
 
             if (!Array.isArray(vesselDataArray)) {
                  console.error("Received non-array data from API");
-                 return { processedVesselIds, apiPredictionCount }; // Return empty set and zero count
+                 return { processedVesselIds }; // Return empty set
             }
 
             const validFleet = new Map();
@@ -1583,11 +1582,6 @@
 
                 // Determine Prediction: Check API prediction first, then try calculating
                 let { predictedPos, isApiPrediction } = determinePrediction(data, currentPos);
-                
-                // Increment count only for valid API predictions
-                if (predictedPos && isApiPrediction) {
-                    apiPredictionCount++;
-                }
 
                 // Create or Update Vessel object and its map representation
                 if (!vessels.has(vesselId)) {
@@ -1599,7 +1593,7 @@
             });
 
             frameDemoFleet();
-            return { processedVesselIds, apiPredictionCount };
+            return { processedVesselIds };
         }
         
         function determinePrediction(data) {
