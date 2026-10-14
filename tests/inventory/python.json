@@ -94,6 +94,7 @@
   "tests.test_postgres::test_live_api_list_detail_and_download_agree",
   "tests.test_postgres::test_postgres_ingestion_sql_failure_preserves_neighbors_and_duplicates",
   "tests.test_postgres::test_postgres_projection_isolates_bad_sql_and_malformed_motion_then_upserts",
+  "tests.test_postgres::test_real_schema_reapplication_preserves_data_and_constraints",
   "tests.test_predictions::test_connection_lost_and_failed_rollback_do_not_stop_scheduler",
   "tests.test_predictions::test_dead_reckoning_uses_nautical_course[0-0.083339-0]",
   "tests.test_predictions::test_dead_reckoning_uses_nautical_course[180--0.083339-0]",
