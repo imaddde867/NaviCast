@@ -430,6 +430,24 @@ test('expired projections refresh the fleet-wide projection count', () => {
     assert.equal(app.elements.get('prediction-count').textContent, 599);
 });
 
+test('off-map projection expiry refreshes fleet-wide statistics', () => {
+    const app = dashboard();
+    const target = new Date(Date.now() + 1800000).toISOString();
+    // First 500 have no projections, remaining 100 have valid projections
+    app.context.batch = [
+        ...Array.from({ length: 500 }, (_, i) => vessel(i + 1)),
+        ...Array.from({ length: 100 }, (_, i) => vessel(i + 501, {
+            predicted_latitude: 60, predicted_longitude: 22.1, prediction_for_timestamp: target
+        }))
+    ];
+    app.run('processVesselData(batch, 0); updateUIComponents()');
+    assert.equal(app.run('vessels.size'), 500);
+    assert.equal(app.elements.get('prediction-count').textContent, 100);
+    // Make off-map projections stale
+    app.run('latestApiVessels.slice(500).forEach(v => v.current_timestamp = "2020-01-01T00:00:00Z"); updateTimeDisplays()');
+    assert.equal(app.elements.get('prediction-count').textContent, 0);
+});
+
 test('determinePrediction exposes only the projected position', () => {
     const app = dashboard();
     app.context.data = vessel(1, { predicted_latitude: 60, predicted_longitude: 22.1,
@@ -440,6 +458,21 @@ test('determinePrediction exposes only the projected position', () => {
     app.context.batch = [app.context.data];
     app.run('processVesselData(batch, 0)');
     assert.equal(app.run("'hasApiPrediction' in vessels.get(1)"), false);
+});
+
+test('rejected observations with missing server predictions clear obsolete projections', () => {
+    const app = dashboard();
+    const target = new Date(Date.now() + 1800000).toISOString();
+    // Initial observation with valid projection
+    app.context.batch = [vessel(1, { predicted_latitude: 60, predicted_longitude: 22.1, prediction_for_timestamp: target })];
+    app.run('processVesselData(batch, 0); updateUIComponents()');
+    assert.equal(app.run('vessels.get(1).hasPrediction'), true);
+    assert.equal(app.elements.get('prediction-count').textContent, 1);
+    // Rejected observation: unrealistic position jump with no server projection
+    app.context.batch = [vessel(1, { current_latitude: 0, current_longitude: 0, predicted_latitude: null, predicted_longitude: null })];
+    app.run('processVesselData(batch, 0); updateUIComponents()');
+    assert.equal(app.run('vessels.get(1).hasPrediction'), false);
+    assert.equal(app.elements.get('prediction-count').textContent, 0);
 });
 
 test('prediction toggle respects fresh and stale server projections', () => {

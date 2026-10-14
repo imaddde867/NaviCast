@@ -1050,8 +1050,9 @@
             if (projectionsExpired) {
                 updateFilterCounts();
                 applyVesselFilter();
-                updateProjectionStats();
             }
+            // Refresh fleet-wide projection stats unconditionally to account for off-map expiry
+            updateProjectionStats();
             if (lastUpdateTimestamp) updateFeedStatus();
             const currentTimeEl = document.getElementById('current-time');
             if (currentTimeEl) currentTimeEl.textContent = now.toLocaleTimeString();
@@ -1640,11 +1641,17 @@
             // Updates an existing vessel object and its marker
             const oldLatLng = vessel.marker.getLatLng();
             const prevPos = [oldLatLng.lat, oldLatLng.lng];
-            
+
             const elapsedSeconds = (Date.parse(data.current_timestamp) - Date.parse(vessel.timestamp)) / 1000;
             if (!validateVesselMovement(prevPos, currentPos, elapsedSeconds)) {
                 console.warn(`Ignoring unrealistic or out-of-order observation for vessel ${data.vessel_id}.`);
-                return; // Keep the marker, projection and popup on the same accepted AIS fix.
+                // Clear projection if the rejected observation no longer provides one
+                if (!predictedPos && vessel.hasPrediction) {
+                    vessel.hasPrediction = false;
+                    updatePredictionVisuals(vessel, vessel.lastPosition, null);
+                    if (vessel.marker.isPopupOpen()) vessel.marker.setPopupContent(createPopupContent(vessel.data));
+                }
+                return; // Keep the marker on the same accepted AIS fix.
             }
             vessel.marker.setLatLng(currentPos);
             updateVesselDirection(vessel, courseAngle);
