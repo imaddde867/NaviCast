@@ -36,9 +36,7 @@ Use a disposable PostgreSQL DSN as in `docs/testing.md` (#39). Then:
 ```sh
 mkdir -p reports
 export COVERAGE_FILE=reports/.coverage
-python -m coverage run --branch \
-  --source=api_server,config,mqtt_client,prediction_service,evaluate \
-  -m pytest tests research -q -ra --junitxml=reports/python.xml
+python -m coverage run -m pytest tests research -q -ra --junitxml=reports/python.xml
 python -m coverage json -o reports/python-coverage.json
 python -m coverage xml -o reports/python-coverage.xml
 python scripts/check_coverage.py python reports/python-coverage.json
@@ -49,9 +47,16 @@ npm run report:browser-coverage
 python scripts/check_coverage.py browser reports/browser-coverage.json
 ```
 
-`evaluate` is the actual module name imported by the research tests; specifying
-`research.evaluate` would silently miss it. Missing required file reports fail
-the gate. `tests/coverage-baseline.json` records **maximum uncovered counts per
+`.coveragerc` measures the services, demo data and all research source files,
+including files not imported by the tests. The gate discovers root Python
+services, recursive research Python modules, Cloudflare JavaScript modules and
+static HTML/JavaScript assets independently of the baseline. Test files,
+`conftest.py` and maintenance/build scripts under `scripts/` are excluded.
+Every discovered source needs both a baseline entry and a coverage report;
+unlisted report entries and stale baseline entries also fail. New root Python
+modules must also be added to `.coveragerc`. New frontend modules fail until
+the browser reporter measures them and their baselines are reviewed.
+`tests/coverage-baseline.json` records **maximum uncovered counts per
 module**, not an arbitrary passing percentage. Added covered code cannot mask
 lost coverage by growing a denominator. Any increased uncovered count needs a
 reviewed explanation and explicit baseline change. This is intentionally a

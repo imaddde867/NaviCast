@@ -27,8 +27,31 @@ def read_report(kind, path):
     return result
 
 
-def check(actual, baseline):
+def source_inventory(root, kind):
+    """Production services, research modules and shipped assets; not maintenance scripts."""
+    if kind == 'python':
+        paths = [*root.glob('*.py'), *(root / 'research').rglob('*.py')]
+        paths = [path for path in paths if not path.name.startswith('test_')
+                 and path.name != 'conftest.py']
+    else:
+        directory = root / ('cloudflare' if kind == 'node' else 'static')
+        suffixes = {'.js', '.mjs', '.cjs'}
+        if kind == 'browser':
+            suffixes.add('.html')
+        paths = [path for path in directory.rglob('*') if path.is_file() and path.suffix in suffixes]
+    return {path.relative_to(root).as_posix() for path in paths}
+
+
+def check(actual, baseline, required=None):
+    required = set(baseline) if required is None else set(required)
     ok = True
+    for label, names in (('baseline', set(baseline)), ('report', set(actual))):
+        for name in sorted(required - names):
+            print(f'{name}: missing from coverage {label}: FAIL')
+            ok = False
+        for name in sorted(names - required):
+            print(f'{name}: unexpected in coverage {label}: FAIL')
+            ok = False
     for name, limits in baseline.items():
         for metric, limit in limits.items():
             value = actual.get(name, {}).get(metric)
@@ -45,4 +68,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     baseline = json.loads((root / 'tests/coverage-baseline.json').read_text())[args.kind]
-    raise SystemExit(0 if check(read_report(args.kind, args.report), baseline) else 1)
+    raise SystemExit(0 if check(read_report(args.kind, args.report), baseline,
+                              source_inventory(root, args.kind)) else 1)

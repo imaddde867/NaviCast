@@ -1,0 +1,8 @@
+[run]
+branch = True
+source = api_server,config,demo_data,mqtt_client,prediction_service,research
+omit =
+    tests/*
+    scripts/*
+    conftest.py
+    research/test_*.py

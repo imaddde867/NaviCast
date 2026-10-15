@@ -10,5 +10,6 @@
   "dashboard.spec.mjs::mobile navigation disclaimer and essential controls are visible",
   "dashboard.spec.mjs::projection removed on the next actual poll clears line and endpoint",
   "dashboard.spec.mjs::server land warning and grey dashed rendering survive in the real map",
-  "dashboard.spec.mjs::valid projection renders its exact server trajectory and real popup"
+  "dashboard.spec.mjs::valid projection renders its exact server trajectory and real popup",
+  "worker.spec.mjs::real Worker API drives the Chromium dashboard from raw AIS"
 ]

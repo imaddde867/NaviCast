@@ -61,8 +61,8 @@ count target; removing a required behavior needs an explicit inventory change.
 
 ## Current validation layers
 
-The combined implementation runs 142 Python/PostgreSQL/research cases, 83 Node
-cases, 12 workerd/D1 cases and 12 actual Chromium/Leaflet cases. Required
+The combined implementation runs 144 Python/PostgreSQL/research cases, 83 Node
+cases, 12 workerd/D1 cases and 13 actual Chromium/Leaflet cases. Required
 inventories are per-case contracts, not a target total. The five final CI jobs
 also run coverage gates and ten targeted software/scientific mutation probes.
 Commands above execute all suites and demo Docker startup; coverage reproduction

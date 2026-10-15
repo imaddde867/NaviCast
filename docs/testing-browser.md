@@ -4,7 +4,7 @@ Run `npm ci --ignore-scripts`, `npx playwright install chromium`, then
 `npm run test:browser` (Python 3 is needed for the loopback static server).
 Playwright 1.64.1 runs headless Chromium against the actual `static/index.html`.
 The page still initializes the real Leaflet 1.9.4 map, canvas renderer, popup,
-controls and timers. Tests intercept API responses, provide the pinned Leaflet
+controls and timers. The twelve isolated scenarios intercept API responses, provide the pinned Leaflet
 distribution in place of the CDN response (preserving SRI), replace tiles with
 a blank image and block other external resources. No live AIS/tile dependency.
 Font Awesome is omitted; its icon rendering is not validated.
@@ -35,3 +35,14 @@ CI retains JUnit/HTML reports and failure screenshots/traces. It rejects skipped
 empty or unsuccessful required reports. The focused #42 branch used separate `browser.yml`; the combined #47
 workflow consolidates `browser-e2e` into `ci.yml`.
 No production service, browser login or deployment is involved.
+
+
+A thirteenth scenario (`tests/browser/worker.spec.mjs`) sends Chromium requests
+for `/meta` and `/vessels?limit=1000` to the production default Worker handler
+running in local workerd. Only outbound AIS HTTP is replaced with a raw
+GeoJSON observation (timestamped relative to test start); normalization,
+metadata, projection, API serialization and Leaflet rendering run together.
+The asset binding serves the unchanged dashboard HTML; CDN assets are supplied
+locally and external presentation requests are blocked. This does not verify
+Cloudflare's deployed asset router, live upstream availability or D1 persistence
+(the runtime suite covers D1 separately).
