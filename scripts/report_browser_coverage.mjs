@@ -13,7 +13,7 @@ for (const testDirectory of testDirectories) {
   const report = join(directory, testDirectory.name, 'js-coverage.json');
   const before = entries;
   for (const entry of JSON.parse(readFileSync(report, 'utf8'))) {
-    if (!entry.url.startsWith('http://127.0.0.1:18765/') || !entry.source?.includes('function determinePrediction')) continue;
+    if (new URL(entry.url || 'about:blank').hostname !== '127.0.0.1' || !entry.source?.includes('function determinePrediction')) continue;
     entries++;
     if (source === undefined) source = entry.source;
     assert.equal(entry.source, source, 'all browser cases must measure identical dashboard source');

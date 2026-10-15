@@ -19,6 +19,22 @@
     "research/evaluate.py": {
       "missing_statements": 16,
       "missing_branches": 10
+    },
+    "demo_data.py": {
+      "missing_statements": 0,
+      "missing_branches": 0
+    },
+    "research/make_synthetic.py": {
+      "missing_statements": 5,
+      "missing_branches": 1
+    },
+    "research/splits.py": {
+      "missing_statements": 6,
+      "missing_branches": 6
+    },
+    "research/uncertainty.py": {
+      "missing_statements": 3,
+      "missing_branches": 3
     }
   },
   "node": {
