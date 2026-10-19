@@ -12,7 +12,7 @@
   "routes": [
     { "pattern": "navicast.imadlab.com", "custom_domain": true }
   ],
-  "triggers": { "crons": ["* * * * *", "10 0 * * *"] },
+  "triggers": { "crons": [] },
   "d1_databases": [
     {
       "binding": "AIS_ARCHIVE_DB",

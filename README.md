@@ -1,5 +1,7 @@
 # NaviCast
 
+> **Maintenance mode:** no further development. The Cloudflare Worker keeps serving the live map; the AIS archive crons are disabled (they exceeded the free-tier CPU limit). Existing archived data stays in D1.
+
 NaviCast is a FastAPI and Leaflet vessel map with a live AIS pipeline and a local demo. The demo serves four synthetic Baltic vessel records and 30-minute dead-reckoning estimates. It does not need a database, AIS feed, or trained model.
 
 ![NaviCast synthetic demo: Baltic vessel map and constant-course projections](docs/dashboard.png)

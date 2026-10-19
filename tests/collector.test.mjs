@@ -248,8 +248,8 @@ test('scheduled throws on an unknown cron and does no work', async t => {
   assert.equal(fetches.length + db.queries.length, 0);
 });
 
-test('worker cron constants match wrangler.jsonc triggers', () => {
+test('archive crons are disabled (maintenance mode, free-tier CPU limit)', () => {
   const config = readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
   const crons = JSON.parse(/"crons":\s*(\[[^\]]*\])/.exec(config)[1]);
-  assert.deepEqual(crons, [SNAPSHOT_CRON, METADATA_CRON]);
+  assert.deepEqual(crons, []);
 });
