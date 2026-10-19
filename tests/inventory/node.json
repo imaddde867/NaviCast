@@ -81,5 +81,5 @@
   "test::versioned land mask has intact bytes, metadata, dimensions and row encoding",
   "test::vessel identity, country and type are escaped in popup HTML",
   "test::vessels projected outside the mask area get null, not a false all-clear",
-  "test::worker cron constants match wrangler.jsonc triggers"
+  "test::archive crons are disabled (maintenance mode, free-tier CPU limit)"
 ]
