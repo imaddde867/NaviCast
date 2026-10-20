@@ -26,7 +26,7 @@ overlaps it. Projection lines and endpoints are noninteractive so vessel hover,
 centre clicks and mobile taps reach the current marker; the vessel popup retains
 the projection details. A mobile touch regression covers the same overlap.
 
-Local baseline: 12 passed in 4.8 s, Node 22.23.1. Run
+Local baseline: 14 passed in 8.3 s, Node 26.10.0. Run
 `node scripts/check_browser_mutations.mjs` to demonstrate detection of removing
 the actual notice, requesting only 500 API rows and adding a browser prediction
 fallback. The script requires a passing unmodified temporary copy and executed

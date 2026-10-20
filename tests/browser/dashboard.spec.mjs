@@ -115,8 +115,10 @@ test('valid projection renders its exact server trajectory and real popup', asyn
   await expect(page.locator('#prediction-count')).toHaveText('1');
   const point = await page.evaluate(() => {
     const p = map.latLngToContainerPoint([59.5, 20]);
-    return { x: p.x, y: p.y };
+    const q = map.latLngToContainerPoint([59.56667149, 20]);
+    return { x: p.x, y: p.y, overlap: p.distanceTo(q) };
   });
+  expect(point.overlap).toBeLessThan(6.75); // centre click must land inside the endpoint hit area (radius 6 + half stroke), else #43 is not covered
   await page.locator('#map').hover({ position: point });
   expect(await page.evaluate(() => vessels.get(230000001).predictionLine.options.weight)).toBe(3);
   await openVessel(page);
