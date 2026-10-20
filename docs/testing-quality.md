@@ -13,7 +13,7 @@ onto main after #42 merges, then consolidate workflows once all suite PRs merge.
 | `cloudflare/worker.mjs` | 283/283 lines | 190/196 V8 ranges | 0 lines, 6 branches |
 | `cloudflare/collector.mjs` | 130/130 lines | 78/82 V8 ranges | 0 lines, 4 branches |
 | `cloudflare/landmask.mjs` | 86/86 lines | 28/31 V8 ranges | 0 lines, 3 branches |
-| `static/index.html` inline script | 868/973 converted statements | 189/248 V8 ranges | 105 converted statements, 59 branches |
+| `static/index.html` inline script | 867/972 converted statements | 189/248 V8 ranges | 105 converted statements, 59 branches |
 | `research/evaluate.py` | 122/144 statements | 38/52 branches | 22 statements, 14 branches |
 | `api_server.py` | 205/248 statements | 37/54 branches | 43 statements, 17 branches |
 | `config.py` | 16/16 statements | 2/2 branches | 0 statements/branches |

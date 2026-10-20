@@ -12,7 +12,8 @@ Font Awesome is omitted; its icon rendering is not validated.
 Thirteen dashboard cases cover missing/expired/invalid-coordinate forecasts, exact server
 trajectory and popup, next-poll deletion, land warning/style, 600/1,000 counts
 and limits, invalid metadata/recovery, API exponential retry, filtering/escaping
-and mobile controls/disclaimer. Assertions combine actual DOM/user actions,
+and mobile controls/disclaimer, plus a centre-tap popup check beneath an
+overlapping projection endpoint. Assertions combine actual DOM/user actions,
 real attached Leaflet layers, exact trajectory coordinates and nontransparent
 canvas pixels. They do not manufacture missing elements. Prediction horizon
 validation remains server-owned as required by #38; browser checks verify
