@@ -84,7 +84,7 @@ async function loaded(page, count = 1) {
 async function openVessel(page) {
   const point = await page.evaluate(() => {
     const p = map.latLngToContainerPoint([59.5, 20]);
-    return { x: p.x, y: p.y + 6 };
+    return { x: p.x, y: p.y };
   });
   await page.locator('#map').click({ position: point });
   await expect(page.locator('.leaflet-popup')).toBeVisible();
@@ -113,10 +113,34 @@ test('valid projection renders its exact server trajectory and real popup', asyn
   expect(rendered.lines).toHaveLength(1);
   expect(rendered.lines[0].points).toEqual([[59.5, 20], [59.56667149, 20]]);
   await expect(page.locator('#prediction-count')).toHaveText('1');
+  const point = await page.evaluate(() => {
+    const p = map.latLngToContainerPoint([59.5, 20]);
+    return { x: p.x, y: p.y };
+  });
+  await page.locator('#map').hover({ position: point });
+  expect(await page.evaluate(() => vessels.get(230000001).predictionLine.options.weight)).toBe(3);
   await openVessel(page);
   await expect(page.locator('.leaflet-popup')).toContainText('Constant-course projection · 30 min');
   await expect(page.locator('.leaflet-popup')).toContainText('230000001');
   expect(state.errors).toEqual([]);
+});
+
+test('mobile centre tap opens the vessel popup beneath a projection endpoint', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  const page = await context.newPage();
+  try {
+    await dashboard(page, [projected()]);
+    await loaded(page);
+    const point = await page.evaluate(() => {
+      const p = map.latLngToContainerPoint([59.5, 20]);
+      const rect = document.getElementById('map').getBoundingClientRect();
+      return { x: rect.left + p.x, y: rect.top + p.y };
+    });
+    await page.touchscreen.tap(point.x, point.y);
+    await expect(page.locator('.leaflet-popup')).toContainText('230000001');
+  } finally {
+    await context.close();
+  }
 });
 
 test('projection removed on the next actual poll clears line and endpoint', async ({ page }) => {
