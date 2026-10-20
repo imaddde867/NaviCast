@@ -7,7 +7,7 @@
   "dashboard.spec.mjs::invalid metadata never guesses configuration or requests forecasts",
   "dashboard.spec.mjs::invalid projection never creates a substitute trajectory",
   "dashboard.spec.mjs::missing projection never creates a substitute trajectory",
-  "dashboard.spec.mjs::mobile centre tap opens the vessel popup beneath a projection endpoint",
+  "dashboard.spec.mjs::mobile touch › centre tap opens the vessel popup beneath a projection endpoint",
   "dashboard.spec.mjs::mobile navigation disclaimer and essential controls are visible",
   "dashboard.spec.mjs::projection removed on the next actual poll clears line and endpoint",
   "dashboard.spec.mjs::server land warning and grey dashed rendering survive in the real map",

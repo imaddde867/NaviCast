@@ -127,22 +127,23 @@ test('valid projection renders its exact server trajectory and real popup', asyn
   expect(state.errors).toEqual([]);
 });
 
-test('mobile centre tap opens the vessel popup beneath a projection endpoint', async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
-  const page = await context.newPage();
-  try {
+test.describe('mobile touch', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  // Own context options, shared instrumented page fixture: the coverage hooks need this case's dashboard coverage.
+  test('centre tap opens the vessel popup beneath a projection endpoint', async ({ page }) => {
     await dashboard(page, [projected()]);
     await loaded(page);
     const point = await page.evaluate(() => {
       const p = map.latLngToContainerPoint([59.5, 20]);
+      const q = map.latLngToContainerPoint([59.56667149, 20]);
       const rect = document.getElementById('map').getBoundingClientRect();
-      return { x: rect.left + p.x, y: rect.top + p.y };
+      return { x: rect.left + p.x, y: rect.top + p.y, overlap: p.distanceTo(q) };
     });
+    expect(point.overlap).toBeLessThan(6.75); // tap lands inside the endpoint hit area, as in the desktop centre-click case
     await page.touchscreen.tap(point.x, point.y);
     await expect(page.locator('.leaflet-popup')).toContainText('230000001');
-  } finally {
-    await context.close();
-  }
+  });
 });
 
 test('projection removed on the next actual poll clears line and endpoint', async ({ page }) => {
