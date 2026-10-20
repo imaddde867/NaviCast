@@ -1224,6 +1224,7 @@
                 
             const marker = L.circleMarker(position, {
                 radius: isPrediction ? 6 : 7,
+                interactive: !isPrediction,
                 color: borderColor, // Border color depends on theme
                 weight: 1.5,
                 fillColor: vesselColor, // Fill color depends on type
@@ -1707,6 +1708,7 @@
                  // Create and add the dashed line
                  const landConflict = vessel.data?.projection_land_conflict === true;
                  vessel.predictionLine = L.polyline([displayPos, predictedPos], { 
+                     interactive: false,
                      color: landConflict ? '#8a8a8a' : predictionColor, dashArray: landConflict ? '2,8' : '5,5', weight: 2, opacity: 0.7 
                  });
                  addLayer(vessel.predictionLine);
@@ -1715,9 +1717,6 @@
                  vessel.predictionMarker = createVesselMarker(predictedPos, true); // isPrediction = true
                  addLayer(vessel.predictionMarker);
                  if (landConflict) vessel.predictionMarker.setStyle({ fillOpacity: 0, fillColor: '#8a8a8a', color: '#8a8a8a' }); // hollow grey: crosses land
-                 vessel.predictionMarker.bindTooltip(`${predictionHorizonMinutes} min ahead`, { 
-                     direction: 'top', permanent: false 
-                 });
 
                  // Setup hover effects (ensure listeners are managed properly)
                  vessel.marker.off('mouseover').on('mouseover', () => { 
