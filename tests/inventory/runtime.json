@@ -5,6 +5,8 @@
   "tests/runtime/worker.test.mjs::entrypoint metadata and invalid queries need no upstream",
   "tests/runtime/worker.test.mjs::failed upstream cron writes nothing and unknown cron rejects",
   "tests/runtime/worker.test.mjs::list, detail and exports agree through real entrypoint and runtime cache",
+  "tests/runtime/worker.test.mjs::live health returns generic 503 when the upstream is unavailable",
+  "tests/runtime/worker.test.mjs::live health shares the runtime cache and preserves historical D1 rows",
   "tests/runtime/worker.test.mjs::minute cron writes real migrated D1, gzip, timestamps and raw sentinels once",
   "tests/runtime/worker.test.mjs::real migration enforces kind and null constraints",
   "tests/runtime/worker.test.mjs::retention boundary blocks cron before upstream and leaves database unchanged",
