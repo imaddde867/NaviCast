@@ -4,7 +4,7 @@ import { collectMetadata, collectSnapshot } from './collector.mjs';
 
 const UPSTREAM = 'https://meri.digitraffic.fi/api/ais/v1/locations';
 const VESSELS_UPSTREAM = 'https://meri.digitraffic.fi/api/ais/v1/vessels';
-// Must match triggers.crons in wrangler.jsonc (tests/collector.test.mjs checks this).
+// Historical schedules; triggers.crons is empty in maintenance mode.
 export const SNAPSHOT_CRON = '* * * * *';
 export const METADATA_CRON = '10 0 * * *';
 const HEALTH_MAX_AGE_MS = 5 * 60 * 1000;
@@ -216,10 +216,10 @@ function csv(vessels) {
 }
 
 // Reads exactly one row through the primary-key index (newest 'ais/' key), never MAX() over the table,
-// so a health poll costs a couple of rows read against D1's 5M/day free quota. Exposes only ok/age_s.
+// so an archive-health poll costs a couple of rows read against D1's free quota. Exposes only ok/age_s.
 // 503 when collection stopped (fetched_at old) or the upstream froze (data_updated_at old while the
 // collector keeps fetching). A null or unparseable data_updated_at is not a failure by itself.
-async function health(env) {
+async function archiveHealth(env) {
   try {
     const row = await env.AIS_ARCHIVE_DB.prepare(
       "SELECT fetched_at, data_updated_at FROM archive_objects WHERE key >= 'ais/' AND key < 'ais0' ORDER BY key DESC LIMIT 1",
@@ -241,10 +241,19 @@ export default {
     const url = new URL(request.url);
     if (request.method !== 'GET') return json({ detail: 'Method not allowed' }, 405, { Allow: 'GET' });
     if (url.pathname === '/meta') return json({ mode: 'live', prediction_method: 'dead_reckoning', prediction_horizon_minutes: 30, observation_stale_after_seconds: 300 });
-    if (url.pathname === '/docs') return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>NaviCast API</title><main><h1>NaviCast live API</h1><p>Digitraffic AIS observations in the Baltic region, cached for up to 30 seconds. Only observations from the last 30 minutes are returned. Constant speed and course projections target 30 minutes after the source observation; unavailable motion produces no projection. <code>projection_land_conflict</code> is true when the straight-line projection crosses land in an OpenStreetMap coastline mask (<code>projection_clear_until_fraction</code> is then the fraction of the path before the coast), false when no land was found along it inside the mask area (9–31°E, 53.5–66°N), and null when it cannot be resolved: no projection, a start position on mapped land, or a path that leaves the mask area before reaching land (positions outside the mask are unknown, not assumed to be water). The mask is approximate: the path is sampled every 100 m, inland lakes count as land, and islets smaller than a 0.001° grid cell can be absent, so a clear flag is not a guarantee. The projection itself is never altered and the flags are not for navigation.</p><ul><li><a href="/vessels?limit=500">GET /vessels</a>: optional mmsi, from_time, to_time, limit (1–1000, default 100). ISO dates use UTC unless an offset is supplied. Time filters select the current snapshot, with a two-hour default range.</li><li>GET /vessels/{MMSI}: one vessel, or 404.</li><li><a href="/vessels/download?format=csv">GET /vessels/download</a>: format=json|csv, with the same MMSI and time filters, up to 10000 rows.</li><li><a href="/meta">GET /meta</a>: mode, prediction horizon and observation staleness threshold.</li><li><a href="/health">GET /health</a>: archive freshness, 200 when the newest archived AIS snapshot is under five minutes old, otherwise 503.</li></ul><p>The edge API uses no historical database or trained model. Ship type is unknown in the location feed. Upstream failures return 503.</p><p>Source: <a href="https://www.digitraffic.fi/en/marine-traffic/">Fintraffic / digitraffic.fi</a>, license <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Observations are filtered and normalized; constant-course estimates are added. Data and estimates are not for navigation. Coastline flags: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, ODbL.</p></main></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    if (url.pathname === '/docs') return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>NaviCast API</title><main><h1>NaviCast live API</h1><p>Digitraffic AIS observations in the Baltic region, cached for up to 30 seconds. Only observations from the last 30 minutes are returned. Constant speed and course projections target 30 minutes after the source observation; unavailable motion produces no projection. <code>projection_land_conflict</code> is true when the straight-line projection crosses land in an OpenStreetMap coastline mask (<code>projection_clear_until_fraction</code> is then the fraction of the path before the coast), false when no land was found along it inside the mask area (9–31°E, 53.5–66°N), and null when it cannot be resolved: no projection, a start position on mapped land, or a path that leaves the mask area before reaching land (positions outside the mask are unknown, not assumed to be water). The mask is approximate: the path is sampled every 100 m, inland lakes count as land, and islets smaller than a 0.001° grid cell can be absent, so a clear flag is not a guarantee. The projection itself is never altered and the flags are not for navigation.</p><ul><li><a href="/vessels?limit=500">GET /vessels</a>: optional mmsi, from_time, to_time, limit (1–1000, default 100). ISO dates use UTC unless an offset is supplied. Time filters select the current snapshot, with a two-hour default range.</li><li>GET /vessels/{MMSI}: one vessel, or 404.</li><li><a href="/vessels/download?format=csv">GET /vessels/download</a>: format=json|csv, with the same MMSI and time filters, up to 10000 rows.</li><li><a href="/meta">GET /meta</a>: mode, prediction horizon and observation staleness threshold.</li><li><a href="/health">GET /health</a>: live AIS feed availability, 200 when the current snapshot can be loaded, otherwise 503.</li><li><a href="/archive-health">GET /archive-health</a>: historical archive freshness (503 while scheduled collection is disabled).</li></ul><p>The edge API uses no historical database or trained model. Ship type is unknown in the location feed. Upstream failures return 503.</p><p>Source: <a href="https://www.digitraffic.fi/en/marine-traffic/">Fintraffic / digitraffic.fi</a>, license <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Observations are filtered and normalized; constant-course estimates are added. Data and estimates are not for navigation. Coastline flags: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, ODbL.</p></main></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     const detailMatch = /^\/vessels\/([^/]+)$/.exec(url.pathname);
     const download = url.pathname === '/vessels/download';
-    if (url.pathname === '/health') return health(env);
+    if (url.pathname === '/archive-health') return archiveHealth(env);
+    if (url.pathname === '/health') {
+      try {
+        await snapshot(url, ctx);
+        return json({ ok: true });
+      } catch (error) {
+        console.error('live health check failed', error);
+        return json({ ok: false }, 503);
+      }
+    }
     if (url.pathname !== '/vessels' && !detailMatch) return env.ASSETS.fetch(request);
     try {
       const query = download || !detailMatch ? filters(url.searchParams)
