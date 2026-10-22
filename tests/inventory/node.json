@@ -1,8 +1,11 @@
 [
-  "test::/health 503 on a frozen upstream, but null or unparseable data_updated_at alone is not a failure",
-  "test::/health is 200 with ok and age_s when the newest AIS row is under five minutes old",
-  "test::/health is 503 when the newest AIS row is stale, even with a fresh metadata row",
-  "test::/health is 503 with only ok:false when the archive is empty or D1 fails",
+  "test::/health populates the shared cache, accepts empty snapshots and reloads after expiry",
+  "test::/health returns no-store generic 503 for upstream HTTP, JSON, schema and network failures",
+  "test::/health uses the live cache independently of stale, empty, failing or missing D1",
+  "test::/health/archive 503 on a frozen upstream, but null or unparseable data_updated_at alone is not a failure",
+  "test::/health/archive is 200 with ok and age_s when the newest AIS row is under five minutes old",
+  "test::/health/archive is 503 when the newest AIS row is stale, even with a fresh metadata row",
+  "test::/health/archive is 503 with only ok:false when the archive is empty or D1 fails",
   "test::500 map markers do not disguise API fleet totals or projections",
   "test::CSV and JSON exports use the same filters and known AIS fields",
   "test::D1 errors and a missing binding are thrown, not swallowed",
@@ -14,6 +17,7 @@
   "test::aging AIS fixes clear their map projections between API updates",
   "test::all query variants reuse one 30-second snapshot cache",
   "test::an older AIS observation cannot replace the accepted fix",
+  "test::archive crons are disabled (maintenance mode, free-tier CPU limit)",
   "test::archiveKey and metaKey are UTC",
   "test::bad filters fail before contacting upstream and limits clamp like Python",
   "test::basemap credits OpenStreetMap and Digitraffic data and its licence",
@@ -80,6 +84,5 @@
   "test::upstream timeout aborts after eight seconds",
   "test::versioned land mask has intact bytes, metadata, dimensions and row encoding",
   "test::vessel identity, country and type are escaped in popup HTML",
-  "test::vessels projected outside the mask area get null, not a false all-clear",
-  "test::archive crons are disabled (maintenance mode, free-tier CPU limit)"
+  "test::vessels projected outside the mask area get null, not a false all-clear"
 ]

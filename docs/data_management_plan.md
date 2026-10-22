@@ -8,11 +8,15 @@ The optional local MQTT/PostgreSQL pipeline stores those fields and the source m
 
 Source: [Fintraffic / digitraffic.fi](https://www.digitraffic.fi/en/marine-traffic/), license [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Data and estimates carry no guarantee of accuracy and must not be used for navigation. Vessel identifiers and movement patterns may identify people for some craft; whether leisure craft appear in this feed remains unverified.
 
-## Proposed archive — not deployed
+## Deployed archive — collection disabled
 
-The draft collector will retain per-minute navigation observations and daily vessel metadata privately, without automatic age-based deletion. Compaction and backup will take place offline. Storage selection and the free-tier capacity/offload procedure remain decisions in [#8](https://github.com/imaddde867/NaviCast/issues/8) and [#13](https://github.com/imaddde867/NaviCast/issues/13). Capacity exhaustion must pause collection rather than introduce charges or silently discard data.
+The per-minute AIS archive was deployed on 2026-10-13 and collected private snapshots into Cloudflare D1 (`navicast-ais-archive`, binding `AIS_ARCHIVE_DB`) until collection was disabled on 2026-10-19 ([PR #51](https://github.com/imaddde867/NaviCast/pull/51)) because the snapshot cron exceeded Workers Free CPU limits. `triggers.crons` is empty. The retained rows contain real MMSIs, vessel metadata and movement observations; they are not updated, not served by the public API, and must remain private and uncommitted. Nothing in this repository deletes them. The live Worker does not need D1: `GET /health` reports live API availability and `GET /health/archive` returns the archive diagnostic, which is expected to be stale.
+
+Preservation is the current policy. The pause rule, capacity limits, offline compaction and backup plans in [#8](https://github.com/imaddde867/NaviCast/issues/8) and [#13](https://github.com/imaddde867/NaviCast/issues/13) apply only if collection is separately approved and restarted. Capacity exhaustion is a reason not to restart collection, not a reason to delete retained rows. Read-only verified downloads of existing days remain allowed; see the [archive runbook](archive-runbook.md).
 
 ## Proposed removal process — owner approval and implementation pending
+
+This policy is a recommendation, not an implemented service. It covers the retained D1 rows as well as any future collection, published data and derived outputs.
 
 Use an existing private email address selected by Imad; the address has not been approved or published. Do not submit MMSI, vessel names, movement details or identity documents in public GitHub issues. Requests should identify the relevant vessel and explain the request privately; collect additional evidence only when needed.
 
@@ -26,7 +30,7 @@ For an accepted request:
 - Redact controlled backups as well. Quarantine a backup that cannot yet be rewritten and record deletion as incomplete. Reapply exclusions before any restored data is made available.
 - Keep a minimal private record of scope, actions, verification and unresolved copies. Never commit the request correspondence or exclusion register.
 
-This process is a recommendation, not an implemented service. Approval is still needed for the contact address, accepted-request scope, exceptional raw-data deletion, backup procedure and any response target.
+Approval is still needed for the contact address, accepted-request scope, exceptional raw-data deletion, backup procedure and any response target.
 
 ## Publication review
 

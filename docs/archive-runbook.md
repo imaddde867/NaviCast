@@ -1,6 +1,8 @@
 # AIS archive runbook (D1)
 
-Operating procedure for the per-minute AIS archive. For design and measurements see [evaluation.md](evaluation.md) and [hosting.md](hosting.md). Tracking issue: #35.
+> **Maintenance mode since 2026-10-19.** Collection is disabled ([PR #51](https://github.com/imaddde867/NaviCast/pull/51)); existing D1 rows are historical and are preserved. `GET /health` reports live API availability only. Use `GET /health/archive` for archive freshness, and expect it to be stale. Do not delete rows or re-enable crons to change a health response. Sections 2–5 are restart-only; see [Historical procedures](#historical-procedures-restart-only).
+
+Retained operating procedure for the per-minute AIS archive. For design and measurements see [evaluation.md](evaluation.md) and [hosting.md](hosting.md). Tracking issue: #35.
 
 Fixed facts:
 
@@ -10,8 +12,9 @@ Fixed facts:
 | D1 database | `navicast-ais-archive`, id `cb69e58b-d90d-4e83-ab1b-fcae470de050` |
 | Live Worker | `navicast`, `https://navicast.imadlab.com` |
 | Archive started | 2026-10-13 18:08 UTC (first row `ais/2026/10/13/18/08.ndjson.gz`) |
-| Crons | `* * * * *` (AIS snapshot), `10 0 * * *` (vessel metadata) |
-| Pause rule | collector refuses to run when the oldest `ais/` row is more than `MAX_RETENTION_DAYS` (8) days older than the run time |
+| Collection disabled | 2026-10-19, Workers Free CPU limit ([#51](https://github.com/imaddde867/NaviCast/pull/51)); the exact last row has not been verified |
+| Crons | inactive; `triggers.crons: []`. Retained expressions: `* * * * *` (AIS snapshot), `10 0 * * *` (vessel metadata) |
+| Pause rule | applies only to a restarted collector: it refuses to run when the oldest `ais/` row is more than `MAX_RETENTION_DAYS` (8) days older than the run time |
 | Measured | about 33 KB gzip and about 1,050 vessels per minute, about 48 MB/day (evening and night sample, 2026-10-13/14) |
 
 All times UTC unless noted. Helsinki is UTC+3 until 2026-10-25.
@@ -19,31 +22,48 @@ All times UTC unless noted. Helsinki is UTC+3 until 2026-10-25.
 ## Ground rules
 
 1. **Never paste an API token, or a screenshot showing one, into chat, an issue or a commit.** Use `read -s CLOUDFLARE_API_TOKEN && export CLOUDFLARE_API_TOKEN` in your own shell. The variable exists only in that shell. Give every token a short expiry and revoke it after use.
-2. **Never delete archive rows before the downloader has exited 0 for that day and both local copies are verified.** Deletes need the owner's explicit approval each time.
+2. **Never delete archive rows before the downloader has exited 0 for that day and both local copies are verified, and only under an approved restart or a separately approved retention decision.** Deletes need the owner's explicit approval each time; maintenance mode authorizes none.
 3. **Delete by the explicit key list from the manifest, never by key range.** A delayed invocation can still write a late key into a closed day.
 4. **Never download today (UTC).** The downloader refuses a day that is not yet closed.
 5. **Keep the archive out of git and out of any public place.** It holds AIS positions with MMSIs. The data-removal policy is not decided yet (#7), so treat it as private.
 6. Do not push to `main`, deploy, or create cloud resources without the owner's approval.
 7. Missed minutes cannot be backfilled (the upstream feed is live only). A paused collector loses data permanently.
 
-## When to run what
+## When to run what (restart-only)
+
+This schedule applied to active collection and does not run in maintenance mode. The 2026-10-21 deadline passed without data loss because no collector is running.
 
 | When (UTC) | Task |
 |---|---|
-| Any time | Section 1: health check |
+| Any time | Section 1: live health at `/health`, archive diagnostic at `/health/archive` |
 | After 00:15 UTC on a given day | Section 2: metadata row for that day exists |
 | After 00:05 UTC, for the previous (closed) day | Section 3: closed-day size and CPU check (first time: 2026-10-15) |
 | Every 3 to 4 days at first, never more than 6 days apart | Section 4: verified download, then Section 5: cleanup |
-| By 2026-10-21 18:08 UTC at the latest | Oldest row must have been cleaned, or the collector pauses |
+| Expired deadline, 2026-10-21 18:08 UTC | Oldest row had to be cleaned while collecting; nothing is paused now |
 
-## 1. Health check (no token)
+## 1. Health checks (no token)
+
+Live API — the only maintenance-mode health check:
 
 ```
 curl -s -w '\nhttp=%{http_code}\n' https://navicast.imadlab.com/health
 ```
 
-- `200` with `{"ok":true,"age_s":N}` and N under about 120: collecting.
-- `503` with `{"ok":false,...}`: no archived minute in the last 5 minutes, or the upstream data time is more than 10 minutes old, or D1 failed. Look at cron past events (dashboard, navicast, Settings, Triggers) for the error text. `archive paused: retention exceeded` means cleanup is overdue (Section 5). Right after a deploy it can take up to 15 minutes before cron fires.
+- `200` with `{"ok":true,"age_s":N}`: the live snapshot loaded; `age_s` is fetch age (the snapshot is cached for about 30 seconds), not observation age. Availability only.
+- `503` with `{"ok":false}`: upstream, parsing or cache-path failure. Check `/vessels` and Worker logs. D1 is not involved.
+
+Archive freshness — diagnostic only, expected stale while collection is disabled:
+
+```
+curl -s -w '\nhttp=%{http_code}\n' https://navicast.imadlab.com/health/archive
+```
+
+- `200` with a small `age_s`: a minute was archived recently; only possible with collection running.
+- `503`: expected in maintenance mode. It does not mean the live map is down, and it is not a reason to delete rows or restore crons. While collecting, the old causes were no archived minute in the last 5 minutes, upstream data time over 10 minutes old, or a D1 failure; `archive paused: retention exceeded` meant cleanup was overdue (Section 5), and that state can return only with a separately approved restart.
+
+## Historical procedures (restart-only)
+
+Sections 2–5 and the pause recovery below describe the pre-2026-10-19 active-collection procedure. They apply only if the owner separately approves restoring collection after resolving the CPU limit. They are not maintenance-mode recovery actions: preserve the existing D1 data, and do not delete rows to make a health check green. Read-only verified downloads (Section 4) remain possible.
 
 ## 2. Metadata row (D1 console, no token)
 
@@ -109,9 +129,9 @@ diff -rq ~/navicast-archive/primary <second independent location> && echo copies
 | `conflicting completed manifest already exists` | a late key appeared after an earlier successful run | keep the old manifest (rename it, e.g. `manifest-DAY.first.json`), rerun, and delete only after the new run exits 0 |
 | authentication or permission error | token scope or expiry | see the token note above |
 
-## 5. Cleanup (owner approval required, each day)
+## 5. Cleanup (restart-only, owner approval required, each day)
 
-Only for days where Section 4 exited 0 **and** the `diff -rq` check passed. The owner approves each deletion explicitly. Deleting needs a token with Account, D1, **Edit** (create it just for this step, expiry end of day, revoke after).
+Only after an approved restart, for days where Section 4 exited 0 **and** the `diff -rq` check passed. Under maintenance mode no deletion is authorized: there is no pause to clear and no retention deadline. The owner approves each deletion explicitly. Deleting needs a token with Account, D1, **Edit** (create it just for this step, expiry end of day, revoke after).
 
 1. Generate the delete statements from the manifest (100 keys per statement, keys pattern-checked):
 
@@ -146,20 +166,20 @@ Only for days where Section 4 exited 0 **and** the `diff -rq` check passed. The 
    ```sql
    SELECT key FROM archive_objects WHERE key >= 'ais/' AND key < 'ais0' ORDER BY key LIMIT 1;
    ```
-   shows the new oldest AIS key. Then run Section 1; `/health` must be 200 and the newest minute current.
+   shows the new oldest AIS key. With collection restarted, run the archive check in Section 1; `/health/archive` must be 200 and the newest minute current. `/health` only shows live API availability.
 
 4. Record the day, row count and what you observed on #35. Unverified until observed: whether the D1 file size shrinks after DELETE (the pause rule uses row age, so it does not depend on this), and whether DELETE works on a nearly full database.
 
 5. Revoke the tokens.
 
-## If the collector is paused
+## If a restarted collector is paused
 
-`/health` is 503 and the cron error is `archive paused: retention exceeded, download and clean up`. Download and verify the oldest days (Section 4), delete them with approval (Section 5). Collection resumes by itself on the next minute. The minutes in between are lost.
+This cannot occur in maintenance mode because no cron runs. After an approved restart it means the oldest row is over eight days old: `/health/archive` is 503 and the cron error is `archive paused: retention exceeded, download and clean up`. Download and verify the oldest days (Section 4), delete them with approval (Section 5). Collection resumes on the next minute. The minutes in between are lost.
 
 ## Handing this to an agent
 
 Give the agent this file and #35, name exactly one section, and state the limits:
 
-> Read `docs/archive-runbook.md` and issue #35. Do Section N only. You may run read-only commands and the downloader. Do not delete rows, deploy, create resources, merge, or push to main. Never print or store the API token; I export it in my own shell. Report exact outputs and anything you could not verify.
+> Read `docs/archive-runbook.md` and issue #35. Do Section N only. The repository is in maintenance mode: do not restore crons, do not treat a stale `/health/archive` as a fault, and do not delete rows. You may run read-only commands and the downloader. Do not deploy, create resources, merge, or push to main. Never print or store the API token; I export it in my own shell. Report exact outputs and anything you could not verify.
 
 Cleanup (Section 5) is always run by the owner or explicitly approved step by step.

@@ -154,7 +154,7 @@ test('timestampExternal must be an integer, and data_updated_at is a string or n
   const row = db.rows.get(archiveKey(NOW));
   const [header, a, b, c] = lines(row.body);
   assert.deepEqual([a.timestampExternal, a.age_s, b.timestampExternal, b.age_s, c.timestampExternal], [null, null, null, null, SEEN]);
-  // A numeric epoch is stored as ISO so /health's Date.parse can read it.
+  // A numeric epoch is stored as ISO so /health/archive's Date.parse can read it.
   assert.deepEqual([header.data_updated_at, row.data_updated_at], ['1970-01-01T00:00:12.345Z', '1970-01-01T00:00:12.345Z']);
   db.rows.clear();
   await collectSnapshot(env, NOW, loader(undefined));

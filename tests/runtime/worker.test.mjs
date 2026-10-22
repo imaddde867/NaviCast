@@ -63,6 +63,31 @@ test.each(['http', 'schema', 'network'])('upstream %s failure returns generic 50
   expect(await response.json()).toEqual({ detail: 'AIS upstream unavailable' });
 });
 
+test('live health shares the runtime cache and preserves historical D1 rows', async () => {
+  const old = now - 3 * 86_400_000;
+  await env.AIS_ARCHIVE_DB.prepare('INSERT INTO archive_objects VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(archiveKey(old), 'ais', old, old, null, 1, new Uint8Array([1]).buffer).run();
+  const before = await rows();
+  fetch.mockImplementation(async () => Response.json(upstream));
+  const health = await request('/health');
+  expect(health.status).toBe(200);
+  expect(health.headers.get('Cache-Control')).toBe('no-store');
+  expect(await health.json()).toEqual({ ok: true, age_s: 0 });
+  expect((await request('/vessels')).status).toBe(200);
+  expect((await request('/health/archive')).status).toBe(503);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(await rows()).toEqual(before);
+  await env.AIS_ARCHIVE_DB.exec('DROP TABLE archive_objects');
+  expect((await request('/health')).status).toBe(200);
+});
+
+test('live health returns generic 503 when the upstream is unavailable', async () => {
+  const health = await request('/health');
+  expect(health.status).toBe(503);
+  expect(health.headers.get('Cache-Control')).toBe('no-store');
+  expect(await health.json()).toEqual({ ok: false });
+});
+
 test('minute cron writes real migrated D1, gzip, timestamps and raw sentinels once', async () => {
   const raw = structuredClone(upstream);
   raw.features[0].properties.sog = 102.3;
@@ -80,7 +105,7 @@ test('minute cron writes real migrated D1, gzip, timestamps and raw sentinels on
   expect(header).toEqual({ schema: 1, fetched_at: '2026-10-14T12:00:00.000Z',
     source: 'https://meri.digitraffic.fi/api/ais/v1/locations', count: 1, data_updated_at: upstream.dataUpdatedTime });
   expect(observation).toMatchObject({ mmsi: 230000001, sog: 102.3, cog: 360, heading: 511, rot: -128, age_s: 60 });
-  expect((await request('/health')).status).toBe(200);
+  expect((await request('/health/archive')).status).toBe(200);
 });
 
 test('daily cron stores metadata without coordinates', async () => {
@@ -90,7 +115,7 @@ test('daily cron stores metadata without coordinates', async () => {
   const [row] = await rows();
   expect(row.key).toBe('meta/2026/10/14.json.gz');
   expect(JSON.parse(await unzip(row.body)).vessels).toEqual(vessels);
-  expect((await request('/health')).status).toBe(503);
+  expect((await request('/health/archive')).status).toBe(503);
 });
 
 test('retention boundary blocks cron before upstream and leaves database unchanged', async () => {
@@ -100,14 +125,14 @@ test('retention boundary blocks cron before upstream and leaves database unchang
   await expect(schedule(SNAPSHOT_CRON)).rejects.toThrow('retention exceeded');
   expect(fetch).not.toHaveBeenCalled();
   expect(await rows()).toHaveLength(1);
-  expect((await request('/health')).status).toBe(503);
+  expect((await request('/health/archive')).status).toBe(503);
 });
 
 test('cron and collector database failures propagate; health fails closed', async () => {
   await env.AIS_ARCHIVE_DB.exec('DROP TABLE archive_objects');
   await expect(schedule(SNAPSHOT_CRON)).rejects.toThrow();
   await expect(collectSnapshot(env, now, async () => upstream)).rejects.toThrow();
-  const health = await request('/health');
+  const health = await request('/health/archive');
   expect(health.status).toBe(503);
   expect(await health.json()).toEqual({ ok: false });
   expect(fetch).not.toHaveBeenCalled();
