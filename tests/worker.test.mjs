@@ -330,32 +330,32 @@ function archived(db, ageMs, key = 'ais/2026/10/13/08/05.ndjson.gz', dataAgeMs =
   });
 }
 
-test('/health is 200 with ok and age_s when the newest AIS row is under five minutes old', async t => {
+test('/archive-health is 200 with ok and age_s when the newest AIS row is under five minutes old', async t => {
   const h = harness(t);
   h.env.AIS_ARCHIVE_DB = fakeD1();
   archived(h.env.AIS_ARCHIVE_DB, 10 * 60_000, 'ais/2026/10/13/07/55.ndjson.gz');
   archived(h.env.AIS_ARCHIVE_DB, 30_000);
   archived(h.env.AIS_ARCHIVE_DB, 1_000, 'meta/2026/10/13.json.gz');
-  const response = await h.request('/health');
+  const response = await h.request('/archive-health');
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
   const body = await response.json();
   assert.deepEqual(Object.keys(body).sort(), ['age_s', 'ok']);
   assert.equal(body.ok, true);
   assert.ok(body.age_s >= 29 && body.age_s <= 35, `age_s ${body.age_s}`);
-  assert.equal(h.calls.length, 0, 'health does not touch the live upstream or its cache');
+  assert.equal(h.calls.length, 0, 'archive health does not touch the live upstream or its cache');
   const { queries } = h.env.AIS_ARCHIVE_DB;
   assert.equal(queries.length, 1);
   assert.match(queries[0].sql, /ORDER BY key DESC LIMIT 1$/);
   assert.doesNotMatch(queries[0].sql, /MAX\(|COUNT\(/i);
 });
 
-test('/health is 503 when the newest AIS row is stale, even with a fresh metadata row', async t => {
+test('/archive-health is 503 when the newest AIS row is stale, even with a fresh metadata row', async t => {
   const h = harness(t);
   h.env.AIS_ARCHIVE_DB = fakeD1();
   archived(h.env.AIS_ARCHIVE_DB, 6 * 60_000);
   archived(h.env.AIS_ARCHIVE_DB, 1_000, 'meta/2026/10/13.json.gz');
-  const response = await h.request('/health');
+  const response = await h.request('/archive-health');
   assert.equal(response.status, 503);
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
   const body = await response.json();
@@ -364,12 +364,12 @@ test('/health is 503 when the newest AIS row is stale, even with a fresh metadat
   assert.ok(body.age_s >= 359);
 });
 
-test('/health 503 on a frozen upstream, but null or unparseable data_updated_at alone is not a failure', async t => {
+test('/archive-health 503 on a frozen upstream, but null or unparseable data_updated_at alone is not a failure', async t => {
   const status = async (...args) => {
     const h = harness(t);
     h.env.AIS_ARCHIVE_DB = fakeD1();
     archived(h.env.AIS_ARCHIVE_DB, ...args);
-    const response = await h.request('/health');
+    const response = await h.request('/archive-health');
     return [response.status, await response.json()];
   };
   const key = 'ais/2026/10/13/08/05.ndjson.gz';
@@ -385,10 +385,10 @@ test('/health 503 on a frozen upstream, but null or unparseable data_updated_at 
   const h = harness(t);
   h.env.AIS_ARCHIVE_DB = fakeD1();
   h.env.AIS_ARCHIVE_DB.rows.set(key, { key, kind: 'ais', fetched_at: Date.now() - 1000, data_updated_at: 'not a date' });
-  assert.equal((await h.request('/health')).status, 200);
+  assert.equal((await h.request('/archive-health')).status, 200);
 });
 
-test('/health is 503 with only ok:false when the archive is empty or D1 fails', async t => {
+test('/archive-health is 503 with only ok:false when the archive is empty or D1 fails', async t => {
   t.mock.method(console, 'error', () => {});
   const empty = harness(t);
   empty.env.AIS_ARCHIVE_DB = fakeD1();
@@ -397,11 +397,35 @@ test('/health is 503 with only ok:false when the archive is empty or D1 fails', 
   failing.env.AIS_ARCHIVE_DB = fakeD1({ fail: new Error('secret D1 internals') });
   const unbound = harness(t);
   for (const h of [empty, failing, unbound]) {
-    const response = await h.request('/health');
+    const response = await h.request('/archive-health');
     assert.equal(response.status, 503);
     assert.equal(response.headers.get('Cache-Control'), 'no-store');
     assert.deepEqual(await response.json(), { ok: false });
   }
+});
+
+test('/health reports live upstream availability independent of D1 archive', async t => {
+  const h = harness(t);
+  h.env.AIS_ARCHIVE_DB = fakeD1({ fail: new Error('D1 unavailable') });
+  assert.equal((await h.request('/health')).status, 200);
+  assert.deepEqual(await (await h.request('/health')).json(), { ok: true });
+  assert.equal(h.calls.length, 1, 'live health shares the cached snapshot');
+  assert.equal(h.env.AIS_ARCHIVE_DB.queries.length, 0, 'no archive reads');
+});
+
+test('/health fails closed when Digitraffic cannot supply a valid snapshot', async t => {
+  t.mock.method(console, 'error', () => {});
+  const h = harness(t, [], () => new Response('upstream unavailable', { status: 503 }));
+  const response = await h.request('/health');
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  assert.deepEqual(await response.json(), { ok: false });
+});
+
+test('/health rejects an invalid upstream schema without requiring archive binding', async t => {
+  t.mock.method(console, 'error', () => {});
+  const h = harness(t, [], () => Response.json({ type: 'not-a-feature-collection' }));
+  assert.equal((await h.request('/health')).status, 503);
 });
 
 test('non-GET API requests reject with 405 without upstream work', async t => {

@@ -1,6 +1,6 @@
-# AIS archive runbook (D1)
+# AIS archive runbook (D1; historical, collection disabled)
 
-Operating procedure for the per-minute AIS archive. For design and measurements see [evaluation.md](evaluation.md) and [hosting.md](hosting.md). Tracking issue: #35.
+Historical operating procedure for the per-minute AIS archive. **Scheduled collection was disabled by PR #51 on 2026-10-19 due to Workers Free CPU limits; do not restart collection or delete existing D1 rows as part of routine health checks.** The live `/health` checks Digitraffic snapshot availability; `/archive-health` separately reports stale historical archive freshness and is expected to return 503 in maintenance mode. For design and measurements see [evaluation.md](evaluation.md) and [hosting.md](hosting.md). Tracking issue: #35.
 
 Fixed facts:
 
